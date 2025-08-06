@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+
+{% block title %}Панель управління - WireGuard Manager{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-tachometer-alt"></i> Панель управління
+                <small class="text-muted">Вітаємо, {{ user.get_full_name|default:user.username }}!</small>
+            </h1>
+        </div>
+    </div>
+    
+    <!-- Status Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <i class="fas fa-shield-alt fa-3x text-primary mb-3"></i>
+                    <h5>2FA Автентифікація</h5>
+                    {% if user.is_2fa_enabled %}
+                        <span class="badge bg-success">Увімкнена</span>
+                        <p class="mt-2">Ваш акаунт захищений двофакторною автентифікацією</p>
+                        <a href="{% url 'accounts:disable_2fa' %}" class="btn btn-outline-danger btn-sm">
+                            <i class="fas fa-times"></i> Вимкнути 2FA
+                        </a>
+                    {% else %}
+                        <span class="badge bg-warning">Вимкнена</span>
+                        <p class="mt-2">Рекомендуємо увімкнути 2FA для додаткової безпеки</p>
+                        <a href="{% url 'accounts:setup_2fa' %}" class="btn btn-warning btn-sm">
+                            <i class="fas fa-key"></i> Налаштувати 2FA
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card border-info">
+                <div class="card-body text-center">
+                    <i class="fas fa-network-wired fa-3x text-info mb-3"></i>
+                    <h5>WireGuard VPN</h5>
+                    {% if user.is_wireguard_enabled %}
+                        <span class="badge bg-success">Активний</span>
+                        <p class="mt-2">IP: {{ user.wireguard_ip }}</p>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-info btn-sm" onclick="downloadConfig()">
+                                <i class="fas fa-download"></i> Конфігурація
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="disableWireGuard()">
+                                <i class="fas fa-times"></i> Вимкнути
+                            </button>
+                        </div>
+                    {% else %}
+                        <span class="badge bg-secondary">Неактивний</span>
+                        <p class="mt-2">WireGuard конфігурація не створена</p>
+                        <button class="btn btn-info btn-sm" onclick="enableWireGuard()">
+                            <i class="fas fa-plus"></i> Створити конфігурацію
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <i class="fas fa-clock fa-3x text-success mb-3"></i>
+                    <h5>Останнє підключення</h5>
+                    {% if user.last_vpn_connection %}
+                        <p class="mb-0">{{ user.last_vpn_connection|date:"d.m.Y H:i" }}</p>
+                        <small class="text-muted">{{ user.last_vpn_connection|timesince }} тому</small>
+                    {% else %}
+                        <p class="text-muted">Ще не підключався</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- WireGuard Config Display -->
+    {% if user.is_wireguard_enabled and user.wireguard_config %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-code"></i> Конфігурація WireGuard
+                    </h5>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="toggleConfig()">
+                            <i class="fas fa-eye" id="toggleIcon"></i> <span id="toggleText">Показати</span>
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="generateQR()">
+                            <i class="fas fa-qrcode"></i> QR код
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body" id="configBody" style="display: none;">
+                    <pre class="bg-light p-3 rounded"><code id="configContent">{{ user.wireguard_config }}</code></pre>
+                    
+                    <!-- QR Code Container -->
+                    <div id="qrContainer" class="text-center mt-3" style="display: none;">
+                        <canvas id="qrcode"></canvas>
+                        <p class="mt-2 text-muted">Відскануйте QR код для швидкого налаштування</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Recent Activity -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history"></i> Остання активність
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Дія</th>
+                                    <th>IP адреса</th>
+                                    <th>Час</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in user.action_logs.all|slice:":10" %}
+                                <tr>
+                                    <td>
+                                        {% if log.action == 'login' %}
+                                            <i class="fas fa-sign-in-alt text-success"></i> Вхід в систему
+                                        {% elif log.action == 'logout' %}
+                                            <i class="fas fa-sign-out-alt text-info"></i> Вихід з системи
+                                        {% elif log.action == 'vpn_connected' %}
+                                            <i class="fas fa-link text-success"></i> VPN підключено
+                                        {% elif log.action == 'vpn_disconnected' %}
+                                            <i class="fas fa-unlink text-warning"></i> VPN відключено
+                                        {% elif log.action == '2fa_success' %}
+                                            <i class="fas fa-shield-alt text-success"></i> 2FA успішна
+                                        {% else %}
+                                            <i class="fas fa-info-circle"></i> {{ log.get_action_display }}
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ log.ip_address|default:"—" }}</td>
+                                    <td>{{ log.timestamp|date:"d.m.Y H:i" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">Немає записів активності</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for QR Code -->
+<div class="modal fade" id="qrModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">QR код конфігурації</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <canvas id="modalQrcode"></canvas>
+                <p class="mt-3">Відскануйте цей QR код в додатку WireGuard</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script>
+function toggleConfig() {
+    const configBody = document.getElementById('configBody');
+    const toggleIcon = document.getElementById('toggleIcon');
+    const toggleText = document.getElementById('toggleText');
+    
+    if (configBody.style.display === 'none') {
+        configBody.style.display = 'block';
+        toggleIcon.className = 'fas fa-eye-slash';
+        toggleText.textContent = 'Приховати';
+    } else {
+        configBody.style.display = 'none';
+        toggleIcon.className = 'fas fa-eye';
+        toggleText.textContent = 'Показати';
+    }
+}
+
+function generateQR() {
+    const config = document.getElementById('configContent').textContent;
+    const canvas = document.getElementById('qrcode');
+    
+    QRCode.toCanvas(canvas, config, {
+        width: 300,
+        margin: 2,
+        color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+        }
+    });
+    
+    document.getElementById('qrContainer').style.display = 'block';
+}
+
+function downloadConfig() {
+    const config = `{{ user.wireguard_config|escapejs }}`;
+    const blob = new Blob([config], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '{{ user.username }}_wireguard.conf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+
+function enableWireGuard() {
+    if (confirm('Створити конфігурацію WireGuard для вашого акаунту?')) {
+        // AJAX запит для створення конфігурації
+        fetch('/wireguard/create-config/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Помилка: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Помилка створення конфігурації');
+        });
+    }
+}
+
+function disableWireGuard() {
+    if (confirm('Видалити конфігурацію WireGuard? Це видалить ваш доступ до VPN.')) {
+        // AJAX запит для видалення конфігурації
+        fetch('/wireguard/delete-config/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Помилка: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Помилка видалення конфігурації');
+        });
+    }
+}
+</script>
+{% endblock %}
