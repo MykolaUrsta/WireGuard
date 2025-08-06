@@ -1,17 +1,34 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from django.core.validators import RegexValidator
 
 class CustomUser(AbstractUser):
     """Розширена модель користувача з додатковими полями для WireGuard"""
     
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
+    
+    # WireGuard базові поля
     is_wireguard_enabled = models.BooleanField(default=False)
     wireguard_public_key = models.TextField(blank=True, null=True)
     wireguard_private_key = models.TextField(blank=True, null=True)
     wireguard_ip = models.GenericIPAddressField(blank=True, null=True)
-    wireguard_config = models.TextField(blank=True, null=True)
+    
+    # Статистика трафіку
+    total_upload = models.BigIntegerField(default=0, help_text='Загальний upload в байтах')
+    total_download = models.BigIntegerField(default=0, help_text='Загальний download в байтах')
+    last_handshake = models.DateTimeField(blank=True, null=True, help_text='Останнє з\'єднання')
+    is_online = models.BooleanField(default=False, help_text='Онлайн статус')
+    
+    # Обмеження
+    data_limit = models.BigIntegerField(blank=True, null=True, help_text='Ліміт трафіку в байтах')
+    allowed_ips = models.TextField(default='0.0.0.0/0, ::/0', help_text='Дозволені IP')
+    
+    # Профіль користувача
+    department = models.CharField(max_length=100, blank=True, null=True)
+    position = models.CharField(max_length=100, blank=True, null=True)
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     
     # 2FA fields
     is_2fa_enabled = models.BooleanField(default=False)
@@ -24,6 +41,26 @@ class CustomUser(AbstractUser):
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
+    
+    @property
+    def total_traffic(self):
+        """Загальний трафік"""
+        return self.total_upload + self.total_download
+    
+    @property
+    def traffic_usage_percent(self):
+        """Відсоток використання трафіку"""
+        if self.data_limit:
+            return min((self.total_traffic / self.data_limit) * 100, 100)
+        return 0
+    
+    def get_upload_mb(self):
+        """Upload в MB"""
+        return round(self.total_upload / 1024 / 1024, 2)
+    
+    def get_download_mb(self):
+        """Download в MB"""
+        return round(self.total_download / 1024 / 1024, 2)
     
     class Meta:
         db_table = 'auth_user'

@@ -1,28 +1,45 @@
-FROM python:3.11-slim
+FROM python:3.11-slim as base
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (cached layer)
 RUN apt-get update && apt-get install -y \
     postgresql-client \
     wireguard-tools \
     iptables \
     qrencode \
-    && rm -rf /var/lib/apt/lists/*
+    netcat-traditional \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Copy requirements and install Python dependencies
+# Create app user early (cached layer)
+RUN useradd --create-home --shell /bin/bash app
+
+# Copy requirements first (cached layer if unchanged)
 COPY requirements.txt .
+
+# Install Python dependencies (cached layer if requirements unchanged)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/logs /app/staticfiles /app/media /app/wireguard_configs \
+    && chown -R app:app /app
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/static /app/media /app/wireguard_configs
+# Copy application code (this will change most often)
+COPY --chown=app:app . .
 
-# Set permissions
+# Set permissions for entrypoint
 RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8000
+
+USER app
 
 ENTRYPOINT ["/app/entrypoint.sh"]

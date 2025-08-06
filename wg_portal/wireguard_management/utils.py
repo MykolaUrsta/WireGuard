@@ -1,254 +1,177 @@
 import subprocess
 import os
-import ipaddress
-import secrets
-import base64
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import x25519
-from django.conf import settings
-from django.utils import timezone
-from .models import WireGuardServer, WireGuardPeer, WireGuardConfigTemplate
-from accounts.models import CustomUser
 import logging
+from django.conf import settings
+from .models import WireGuardPeer, WireGuardServer
 
 logger = logging.getLogger(__name__)
 
 
-class WireGuardManager:
-    """Клас для керування WireGuard конфігураціями та клієнтами"""
+def generate_wireguard_config(peer):
+    """Генерує конфігурацію WireGuard для peer'а"""
     
-    def __init__(self):
-        self.config_path = getattr(settings, 'WIREGUARD_CONFIG_PATH', '/app/wireguard_configs')
-        self.server_interface = getattr(settings, 'WIREGUARD_INTERFACE', 'wg0')
-        self.server_ip = getattr(settings, 'WIREGUARD_SERVER_IP', '10.13.13.1')
-        self.server_port = getattr(settings, 'WIREGUARD_SERVER_PORT', 51820)
-        self.subnet = ipaddress.IPv4Network(getattr(settings, 'WIREGUARD_SUBNET', '10.13.13.0/24'))
+    server = peer.server
     
-    def generate_keypair(self):
-        """Генерує пару ключів WireGuard"""
-        try:
-            # Генеруємо приватний ключ
-            private_key_bytes = os.urandom(32)
-            private_key = base64.b64encode(private_key_bytes).decode('utf-8')
-            
-            # Генеруємо публічний ключ
-            private_key_obj = x25519.X25519PrivateKey.from_private_bytes(private_key_bytes)
-            public_key_bytes = private_key_obj.public_key().public_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PublicFormat.Raw
-            )
-            public_key = base64.b64encode(public_key_bytes).decode('utf-8')
-            
-            return private_key, public_key
-        except Exception as e:
-            logger.error(f"Помилка генерації ключів: {e}")
-            raise
-    
-    def get_next_available_ip(self, server):
-        """Повертає наступну доступну IP адресу для клієнта"""
-        try:
-            # Отримуємо всі зайняті IP
-            used_ips = set(WireGuardPeer.objects.filter(server=server).values_list('client_ip', flat=True))
-            used_ips.add(str(self.subnet.network_address))  # Адреса мережі
-            used_ips.add(str(self.subnet.broadcast_address))  # Broadcast адреса
-            used_ips.add(self.server_ip)  # IP сервера
-            
-            # Знаходимо першу вільну IP
-            for ip in self.subnet.hosts():
-                if str(ip) not in used_ips:
-                    return str(ip)
-            
-            raise ValueError("Немає доступних IP адрес у мережі")
-        except Exception as e:
-            logger.error(f"Помилка отримання IP: {e}")
-            raise
-    
-    def create_peer(self, user, server=None, template=None):
-        """Створює нового клієнта WireGuard"""
-        try:
-            if not server:
-                server = WireGuardServer.objects.filter(is_active=True).first()
-                if not server:
-                    raise ValueError("Немає активного сервера WireGuard")
-            
-            if not template:
-                template = WireGuardConfigTemplate.objects.filter(is_default=True).first()
-                if not template:
-                    template = WireGuardConfigTemplate.objects.first()
-            
-            # Перевіряємо чи користувач вже має peer
-            if hasattr(user, 'wireguard_peer'):
-                raise ValueError("Користувач вже має конфігурацію WireGuard")
-            
-            # Генеруємо ключі
-            private_key, public_key = self.generate_keypair()
-            
-            # Отримуємо IP для клієнта
-            client_ip = self.get_next_available_ip(server)
-            
-            # Створюємо peer
-            peer = WireGuardPeer.objects.create(
-                user=user,
-                server=server,
-                public_key=public_key,
-                private_key=private_key,
-                client_ip=client_ip,
-                allowed_ips=template.allowed_ips if template else '0.0.0.0/0',
-                persistent_keepalive=template.persistent_keepalive if template else 25
-            )
-            
-            # Оновлюємо користувача
-            user.is_wireguard_enabled = True
-            user.wireguard_public_key = public_key
-            user.wireguard_private_key = private_key
-            user.wireguard_ip = client_ip
-            user.wireguard_config = peer.config_content
-            user.save()
-            
-            # Створюємо файл конфігурації
-            self.create_config_file(peer)
-            
-            # Оновлюємо конфігурацію сервера
-            self.update_server_config(server)
-            
-            logger.info(f"Створено WireGuard peer для користувача {user.username}")
-            return peer
-            
-        except Exception as e:
-            logger.error(f"Помилка створення peer: {e}")
-            raise
-    
-    def delete_peer(self, user):
-        """Видаляє клієнта WireGuard"""
-        try:
-            if not hasattr(user, 'wireguard_peer'):
-                raise ValueError("Користувач не має конфігурації WireGuard")
-            
-            peer = user.wireguard_peer
-            server = peer.server
-            
-            # Видаляємо файл конфігурації
-            config_file = os.path.join(self.config_path, f"{user.username}.conf")
-            if os.path.exists(config_file):
-                os.remove(config_file)
-            
-            # Видаляємо peer
-            peer.delete()
-            
-            # Оновлюємо користувача
-            user.is_wireguard_enabled = False
-            user.wireguard_public_key = None
-            user.wireguard_private_key = None
-            user.wireguard_ip = None
-            user.wireguard_config = None
-            user.save()
-            
-            # Оновлюємо конфігурацію сервера
-            self.update_server_config(server)
-            
-            logger.info(f"Видалено WireGuard peer для користувача {user.username}")
-            
-        except Exception as e:
-            logger.error(f"Помилка видалення peer: {e}")
-            raise
-    
-    def create_config_file(self, peer):
-        """Створює файл конфігурації для клієнта"""
-        try:
-            os.makedirs(self.config_path, exist_ok=True)
-            
-            config_file = os.path.join(self.config_path, f"{peer.user.username}.conf")
-            with open(config_file, 'w') as f:
-                f.write(peer.config_content)
-            
-            # Встановлюємо права доступу
-            os.chmod(config_file, 0o600)
-            
-        except Exception as e:
-            logger.error(f"Помилка створення файлу конфігурації: {e}")
-            raise
-    
-    def update_server_config(self, server):
-        """Оновлює конфігурацію сервера з усіма активними клієнтами"""
-        try:
-            server_config = f"""[Interface]
-PrivateKey = {server.private_key}
-Address = {self.server_ip}/32
-ListenPort = {server.listen_port}
-PostUp = iptables -A FORWARD -i {self.server_interface} -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -D FORWARD -i {self.server_interface} -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+    config = f"""[Interface]
+PrivateKey = {peer.private_key}
+Address = {peer.ip_address}/32
+DNS = {server.dns_servers}
+MTU = {server.mtu}
 
+[Peer]
+PublicKey = {server.public_key}
+Endpoint = {server.endpoint}:{server.listen_port}
+AllowedIPs = {peer.allowed_ips}
+PersistentKeepalive = {server.keep_alive}
 """
-            
-            # Додаємо всіх активних клієнтів
-            for peer in server.peers.filter(is_active=True):
-                server_config += f"""[Peer]
-PublicKey = {peer.public_key}
-AllowedIPs = {peer.client_ip}/32
-"""
-                if peer.preshared_key:
-                    server_config += f"PresharedKey = {peer.preshared_key}\n"
-                server_config += "\n"
-            
-            # Зберігаємо конфігурацію сервера
-            server_config_file = os.path.join(self.config_path, f"{self.server_interface}.conf")
-            with open(server_config_file, 'w') as f:
-                f.write(server_config)
-            
-            # Встановлюємо права доступу
-            os.chmod(server_config_file, 0o600)
-            
-            # Перезапускаємо WireGuard інтерфейс
-            self.restart_wireguard_interface()
-            
-        except Exception as e:
-            logger.error(f"Помилка оновлення конфігурації сервера: {e}")
-            raise
     
-    def restart_wireguard_interface(self):
-        """Перезапускає WireGuard інтерфейс"""
-        try:
-            # Зупиняємо інтерфейс
-            subprocess.run(['wg-quick', 'down', self.server_interface], 
-                         capture_output=True, text=True, check=False)
-            
-            # Запускаємо інтерфейс
-            result = subprocess.run(['wg-quick', 'up', self.server_interface], 
-                                  capture_output=True, text=True, check=True)
-            
-            logger.info(f"WireGuard інтерфейс {self.server_interface} перезапущено")
-            
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Помилка перезапуску WireGuard: {e.stderr}")
-            raise
+    return config.strip()
+
+
+def update_server_config(server):
+    """Оновлює конфігурацію WireGuard сервера"""
     
-    def get_peer_statistics(self, peer):
-        """Отримує статистику для клієнта"""
-        try:
-            result = subprocess.run(['wg', 'show', self.server_interface, 'dump'], 
-                                  capture_output=True, text=True, check=True)
+    try:
+        # Базова конфігурація сервера
+        config_lines = [
+            "[Interface]",
+            f"PrivateKey = {server.private_key}",
+            f"Address = {server.server_ip}/24",
+            f"ListenPort = {server.listen_port}",
+            f"DNS = {server.dns_servers}",
+            "",
+            "# Post up rules",
+            "PostUp = iptables -A FORWARD -i wg0 -j ACCEPT",
+            "PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE",
+            "",
+            "# Post down rules", 
+            "PostDown = iptables -D FORWARD -i wg0 -j ACCEPT",
+            "PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE",
+            ""
+        ]
+        
+        # Додаємо активних peer'ів
+        active_peers = server.peers.filter(is_active=True)
+        
+        for peer in active_peers:
+            config_lines.extend([
+                "# " + peer.user.username + " - " + peer.name,
+                "[Peer]",
+                f"PublicKey = {peer.public_key}",
+                f"AllowedIPs = {peer.ip_address}/32",
+                ""
+            ])
+        
+        # Записуємо конфігурацію у файл
+        config_content = "\n".join(config_lines)
+        
+        # Створюємо директорію якщо не існує
+        config_dir = "/app/wireguard_configs"
+        os.makedirs(config_dir, exist_ok=True)
+        
+        config_file = f"{config_dir}/wg_{server.id}.conf"
+        
+        with open(config_file, 'w') as f:
+            f.write(config_content)
+        
+        logger.info(f"Конфігурацію сервера {server.name} оновлено: {config_file}")
+        
+        # Оновлюємо лічильники peer'ів
+        server.update_peer_counts()
+        
+        return config_file
+        
+    except Exception as e:
+        logger.error(f"Помилка оновлення конфігурації сервера {server.name}: {e}")
+        raise
+
+
+def get_wireguard_status():
+    """Отримує статус WireGuard інтерфейсів"""
+    
+    try:
+        # Запускаємо wg show для отримання статусу
+        result = subprocess.run(['wg', 'show'], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            return result.stdout
+        else:
+            logger.warning(f"Помилка отримання статусу WireGuard: {result.stderr}")
+            return ""
             
-            for line in result.stdout.strip().split('\n')[1:]:  # Пропускаємо заголовок
-                parts = line.split('\t')
-                if len(parts) >= 6 and parts[0] == peer.public_key:
-                    peer.last_handshake = timezone.datetime.fromtimestamp(int(parts[2])) if parts[2] != '0' else None
-                    peer.bytes_received = int(parts[3])
-                    peer.bytes_sent = int(parts[4])
-                    peer.save()
-                    break
+    except Exception as e:
+        logger.error(f"Помилка виконання wg show: {e}")
+        return ""
+
+
+def update_peer_traffic_stats():
+    """Оновлює статистику трафіку peer'ів з WireGuard"""
+    
+    try:
+        # Отримуємо статистику з wg show
+        result = subprocess.run(['wg', 'show', 'all', 'transfer'], capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.warning("Не вдалося отримати статистику трафіку WireGuard")
+            return
+        
+        # Парсимо вивід wg show
+        lines = result.stdout.strip().split('\n')
+        current_interface = None
+        
+        for line in lines:
+            line = line.strip()
+            
+            if line.startswith('interface:'):
+                current_interface = line.split(':')[1].strip()
+                continue
+            
+            if line and current_interface:
+                parts = line.split()
+                if len(parts) >= 3:
+                    public_key = parts[0]
+                    bytes_received = int(parts[1]) if parts[1] != '(none)' else 0
+                    bytes_sent = int(parts[2]) if parts[2] != '(none)' else 0
                     
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Помилка отримання статистики: {e}")
+                    # Оновлюємо статистику peer'а
+                    try:
+                        peer = WireGuardPeer.objects.get(public_key=public_key)
+                        peer.bytes_received = bytes_received
+                        peer.bytes_sent = bytes_sent
+                        peer.save(update_fields=['bytes_received', 'bytes_sent'])
+                        
+                        # Оновлюємо статистику користувача
+                        user = peer.user
+                        user.total_download = bytes_received
+                        user.total_upload = bytes_sent
+                        user.save(update_fields=['total_download', 'total_upload'])
+                        
+                    except WireGuardPeer.DoesNotExist:
+                        logger.warning(f"Peer з public key {public_key} не знайдено в БД")
+        
+        logger.info("Статистику трафіку peer'ів оновлено")
+        
+    except Exception as e:
+        logger.error(f"Помилка оновлення статистики трафіку: {e}")
+
+
+def restart_wireguard_interface(interface_name):
+    """Перезапускає WireGuard інтерфейс"""
     
-    def is_peer_connected(self, peer):
-        """Перевіряє чи клієнт підключений"""
-        try:
-            if not peer.last_handshake:
-                return False
-            
-            # Вважаємо підключеним, якщо останній handshake був менше 3 хвилин тому
-            time_diff = timezone.now() - peer.last_handshake
-            return time_diff.total_seconds() < 180
-            
-        except Exception:
+    try:
+        # Зупиняємо інтерфейс
+        subprocess.run(['wg-quick', 'down', interface_name], check=False)
+        
+        # Запускаємо інтерфейс
+        result = subprocess.run(['wg-quick', 'up', interface_name], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            logger.info(f"WireGuard інтерфейс {interface_name} перезапущено")
+            return True
+        else:
+            logger.error(f"Помилка перезапуску інтерфейсу {interface_name}: {result.stderr}")
             return False
+            
+    except Exception as e:
+        logger.error(f"Помилка перезапуску WireGuard інтерфейсу {interface_name}: {e}")
+        return False

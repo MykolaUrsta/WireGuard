@@ -1,97 +1,179 @@
 from django.db import models
-from accounts.models import CustomUser
+from django.contrib.auth import get_user_model
+from django.core.validators import RegexValidator
+from django.utils import timezone
+import ipaddress
+
+User = get_user_model()
 
 
-class WireGuardServer(models.Model):
-    """Модель WireGuard сервера"""
+class WireGuardNetwork(models.Model):
+    """Мережа WireGuard"""
     
-    name = models.CharField(max_length=100, unique=True)
-    public_key = models.TextField()
-    private_key = models.TextField()
-    endpoint = models.CharField(max_length=255)  # IP:PORT
-    listen_port = models.PositiveIntegerField(default=51820)
-    network = models.CharField(max_length=18, default='10.13.13.0/24')  # CIDR
-    dns_servers = models.CharField(max_length=255, default='1.1.1.1,8.8.8.8')
-    is_active = models.BooleanField(default=True)
+    name = models.CharField(max_length=100, unique=True, verbose_name='Назва мережі')
+    network_cidr = models.CharField(
+        max_length=18, 
+        verbose_name='CIDR мережі',
+        help_text='Наприклад: 10.0.0.0/24'
+    )
+    description = models.TextField(blank=True, null=True, verbose_name='Опис')
+    is_active = models.BooleanField(default=True, verbose_name='Активна')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'wireguard_servers'
-        verbose_name = 'WireGuard Сервер'
-        verbose_name_plural = 'WireGuard Сервери'
+        verbose_name = 'WireGuard мережа'
+        verbose_name_plural = 'WireGuard мережі'
+        ordering = ['name']
     
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.network_cidr})"
+    
+    def get_next_available_ip(self):
+        """Отримує наступний доступний IP в мережі"""
+        try:
+            network = ipaddress.IPv4Network(self.network_cidr)
+            used_ips = set()
+            
+            # Додаємо IP серверів
+            for server in self.servers.all():
+                if server.server_ip:
+                    used_ips.add(ipaddress.IPv4Address(server.server_ip))
+            
+            # Додаємо IP peer'ів
+            for server in self.servers.all():
+                for peer in server.peers.all():
+                    if peer.ip_address:
+                        used_ips.add(ipaddress.IPv4Address(peer.ip_address))
+            
+            # Знаходимо перший доступний IP
+            for ip in network.hosts():
+                if ip not in used_ips:
+                    return str(ip)
+            
+            return None
+            
+        except Exception:
+            return None
 
 
-class WireGuardPeer(models.Model):
-    """Модель клієнта WireGuard (peer)"""
+class WireGuardServer(models.Model):
+    """Сервер WireGuard"""
     
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='wireguard_peer')
-    server = models.ForeignKey(WireGuardServer, on_delete=models.CASCADE, related_name='peers')
-    public_key = models.TextField(unique=True)
-    private_key = models.TextField()
-    allowed_ips = models.CharField(max_length=255, default='0.0.0.0/0')
-    client_ip = models.GenericIPAddressField()  # IP клієнта у VPN мережі
-    preshared_key = models.TextField(blank=True, null=True)
+    name = models.CharField(max_length=100, verbose_name='Назва сервера')
+    network = models.ForeignKey(WireGuardNetwork, on_delete=models.CASCADE, related_name='servers')
     
-    # Налаштування
-    persistent_keepalive = models.PositiveIntegerField(default=25)
-    is_active = models.BooleanField(default=True)
+    # Мережні налаштування
+    endpoint = models.CharField(max_length=255, verbose_name='Endpoint', help_text='IP або домен сервера')
+    listen_port = models.PositiveIntegerField(default=51820, verbose_name='Порт')
+    server_ip = models.GenericIPAddressField(verbose_name='IP сервера')
+    
+    # Ключі
+    public_key = models.TextField(verbose_name='Публічний ключ')
+    private_key = models.TextField(verbose_name='Приватний ключ')
+    
+    # Додаткові налаштування
+    dns_servers = models.CharField(max_length=255, default='8.8.8.8, 1.1.1.1', verbose_name='DNS сервери')
+    keep_alive = models.PositiveIntegerField(default=25, verbose_name='Keep Alive')
+    mtu = models.PositiveIntegerField(default=1420, verbose_name='MTU')
     
     # Статистика
-    last_handshake = models.DateTimeField(blank=True, null=True)
-    bytes_sent = models.BigIntegerField(default=0)
-    bytes_received = models.BigIntegerField(default=0)
+    total_peers = models.PositiveIntegerField(default=0, verbose_name='Всього peer\'ів')
+    active_peers = models.PositiveIntegerField(default=0, verbose_name='Активних peer\'ів')
+    
+    # Стан
+    is_active = models.BooleanField(default=True, verbose_name='Активний')
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'wireguard_peers'
-        verbose_name = 'WireGuard Клієнт'
-        verbose_name_plural = 'WireGuard Клієнти'
-        unique_together = ['server', 'client_ip']
+        verbose_name = 'WireGuard сервер'
+        verbose_name_plural = 'WireGuard сервери'
+        ordering = ['name']
     
     def __str__(self):
-        return f"{self.user.username} - {self.client_ip}"
+        return f"{self.name} ({self.endpoint}:{self.listen_port})"
+    
+    def update_peer_counts(self):
+        """Оновлює лічильники peer'ів"""
+        self.total_peers = self.peers.count()
+        self.active_peers = self.peers.filter(is_active=True).count()
+        self.save(update_fields=['total_peers', 'active_peers'])
+
+
+class WireGuardPeer(models.Model):
+    """Peer (клієнт) WireGuard"""
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='wireguard_peers')
+    server = models.ForeignKey(WireGuardServer, on_delete=models.CASCADE, related_name='peers')
+    
+    # Основна інформація
+    name = models.CharField(max_length=100, verbose_name='Назва конфігурації')
+    ip_address = models.GenericIPAddressField(verbose_name='IP адреса')
+    
+    # Ключі
+    public_key = models.TextField(verbose_name='Публічний ключ')
+    private_key = models.TextField(verbose_name='Приватний ключ')
+    
+    # Налаштування
+    allowed_ips = models.CharField(max_length=255, default='0.0.0.0/0, ::/0', verbose_name='Дозволені IP')
+    keep_alive = models.PositiveIntegerField(blank=True, null=True, verbose_name='Keep Alive')
+    
+    # Статистика трафіку
+    bytes_sent = models.BigIntegerField(default=0, verbose_name='Відправлено байт')
+    bytes_received = models.BigIntegerField(default=0, verbose_name='Отримано байт')
+    last_handshake = models.DateTimeField(blank=True, null=True, verbose_name='Останнє з\'єднання')
+    
+    # Стан
+    is_active = models.BooleanField(default=True, verbose_name='Активний')
+    is_online = models.BooleanField(default=False, verbose_name='Онлайн')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'WireGuard peer'
+        verbose_name_plural = 'WireGuard peer\'и'
+        ordering = ['-created_at']
+        unique_together = ['user', 'server', 'name']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.name} ({self.ip_address})"
+    
+    def get_sent_mb(self):
+        """Відправлено в MB"""
+        return round(self.bytes_sent / 1024 / 1024, 2)
+    
+    def get_received_mb(self):
+        """Отримано в MB"""
+        return round(self.bytes_received / 1024 / 1024, 2)
+    
+    def get_total_mb(self):
+        """Загальний трафік в MB"""
+        return self.get_sent_mb() + self.get_received_mb()
     
     @property
-    def config_content(self):
-        """Генерує конфігурацію клієнта"""
+    def is_online(self):
+        """Перевіряє чи peer онлайн (handshake менше 3 хвилин тому)"""
+        if not self.last_handshake:
+            return False
+        return (timezone.now() - self.last_handshake).total_seconds() < 180
+    
+    def generate_config(self):
+        """Генерує конфігурацію для peer'а"""
         config = f"""[Interface]
 PrivateKey = {self.private_key}
-Address = {self.client_ip}/32
+Address = {self.ip_address}/32
 DNS = {self.server.dns_servers}
+MTU = {self.server.mtu}
 
 [Peer]
 PublicKey = {self.server.public_key}
-Endpoint = {self.server.endpoint}
+Endpoint = {self.server.endpoint}:{self.server.listen_port}
 AllowedIPs = {self.allowed_ips}
-PersistentKeepalive = {self.persistent_keepalive}
+PersistentKeepalive = {self.keep_alive or self.server.keep_alive}
 """
-        if self.preshared_key:
-            config += f"PresharedKey = {self.preshared_key}\n"
-        
         return config
-
-
-class WireGuardConfigTemplate(models.Model):
-    """Шаблони конфігурацій для різних типів клієнтів"""
-    
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
-    allowed_ips = models.CharField(max_length=255, default='0.0.0.0/0')
-    dns_servers = models.CharField(max_length=255, default='1.1.1.1,8.8.8.8')
-    persistent_keepalive = models.PositiveIntegerField(default=25)
-    is_default = models.BooleanField(default=False)
-    
-    class Meta:
-        db_table = 'wireguard_config_templates'
-        verbose_name = 'Шаблон Конфігурації'
-        verbose_name_plural = 'Шаблони Конфігурацій'
-    
-    def __str__(self):
-        return self.name

@@ -17,7 +17,7 @@ import base64
 import json
 from .models import CustomUser
 from .forms import UserRegistrationForm, UserLoginForm, Enable2FAForm
-from logging_app.models import UserActionLog
+from audit_logging.models import UserActionLog
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class LoginView(View):
     
     def get(self, request):
         if request.user.is_authenticated:
-            return redirect('dashboard')
+            return redirect('accounts:dashboard')
         form = UserLoginForm()
         return render(request, 'accounts/login.html', {'form': form})
     
@@ -53,7 +53,7 @@ class LoginView(View):
                         ip_address=request.META.get('REMOTE_ADDR'),
                         user_agent=request.META.get('HTTP_USER_AGENT', '')
                     )
-                    return redirect('dashboard')
+                    return redirect('accounts:dashboard')
             else:
                 messages.error(request, 'Невірний email або пароль')
         
@@ -92,7 +92,7 @@ class Verify2FAView(View):
                 ip_address=request.META.get('REMOTE_ADDR'),
                 user_agent=request.META.get('HTTP_USER_AGENT', '')
             )
-            return redirect('dashboard')
+            return redirect('accounts:dashboard')
         else:
             messages.error(request, 'Невірний код автентифікації')
             UserActionLog.objects.create(
@@ -121,7 +121,7 @@ def setup_2fa(request):
     """Налаштування двофакторної автентифікації"""
     if request.user.is_2fa_enabled:
         messages.info(request, '2FA вже увімкнена')
-        return redirect('dashboard')
+        return redirect('accounts:dashboard')
     
     if request.method == 'POST':
         token = request.POST.get('token', '').strip()
@@ -154,7 +154,7 @@ def setup_2fa(request):
                 ip_address=request.META.get('REMOTE_ADDR'),
                 user_agent=request.META.get('HTTP_USER_AGENT', '')
             )
-            return redirect('dashboard')
+            return redirect('accounts:dashboard')
         else:
             messages.error(request, 'Невірний код автентифікації')
     
@@ -308,7 +308,7 @@ class RegistrationView(View):
     
     def get(self, request):
         if request.user.is_authenticated:
-            return redirect('dashboard')
+            return redirect('accounts:dashboard')
         form = UserRegistrationForm()
         return render(request, 'accounts/register.html', {'form': form})
     

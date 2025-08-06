@@ -12,6 +12,21 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# CSRF trusted origins for HTTPS
+CSRF_TRUSTED_ORIGINS = [
+    'https://wg-portal.itc.gov.ua',
+    'https://localhost',
+    'https://127.0.0.1',
+]
+
+# Add domains from ALLOWED_HOSTS to CSRF_TRUSTED_ORIGINS
+for host in ALLOWED_HOSTS:
+    if host and host not in ['localhost', '127.0.0.1', '0.0.0.0']:
+        if f'https://{host}' not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(f'https://{host}')
+        if f'http://{host}' not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(f'http://{host}')
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -25,7 +40,7 @@ INSTALLED_APPS = [
     'django_otp.plugins.otp_static',
     'accounts',
     'wireguard_management',
-    'logging',
+    'audit_logging',
 ]
 
 MIDDLEWARE = [
@@ -38,7 +53,7 @@ MIDDLEWARE = [
     'django_otp.middleware.OTPMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'logging.middleware.VPNConnectionMiddleware',
+    'audit_logging.middleware.VPNConnectionMiddleware',
 ]
 
 ROOT_URLCONF = 'wireguard_manager.urls'
@@ -54,6 +69,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'wireguard_manager.context_processors.admin_dashboard_stats',
             ],
         },
     },
@@ -113,7 +129,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = 'uk'
-TIME_ZONE = 'Europe/Kiev'
+TIME_ZONE = 'Europe/Uzhgorod'
 USE_I18N = True
 USE_TZ = True
 
