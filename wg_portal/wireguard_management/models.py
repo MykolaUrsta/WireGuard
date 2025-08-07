@@ -1,8 +1,24 @@
+
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
 from django.utils import timezone
 import ipaddress
+
+class PeerMonitoring(models.Model):
+    """Історія трафіку peer'а (пристрою) для моніторингу активності"""
+    peer = models.ForeignKey('WireGuardPeer', on_delete=models.CASCADE, related_name='monitoring')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    bytes_sent = models.BigIntegerField(default=0)
+    bytes_received = models.BigIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Моніторинг peer''а'
+        verbose_name_plural = 'Моніторинг peer''ів'
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.peer} - {self.timestamp}"
 
 User = get_user_model()
 
@@ -177,3 +193,150 @@ AllowedIPs = {self.allowed_ips}
 PersistentKeepalive = {self.keep_alive or self.server.keep_alive}
 """
         return config
+
+
+class WireGuardTunnel(models.Model):
+    """Тунель WireGuard"""
+    
+    STATUS_CHOICES = [
+        ('active', 'Активний'),
+        ('inactive', 'Неактивний'),
+        ('error', 'Помилка'),
+    ]
+    
+    name = models.CharField(max_length=100, unique=True, verbose_name='Назва тунелю')
+    interface_name = models.CharField(max_length=20, default='wg0', verbose_name='Інтерфейс')
+    server = models.ForeignKey(WireGuardServer, on_delete=models.CASCADE, related_name='tunnels')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='inactive')
+    is_auto_start = models.BooleanField(default=True, verbose_name='Автозапуск')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_started = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        verbose_name = 'WireGuard тунель'
+        verbose_name_plural = 'WireGuard тунелі'
+        ordering = ['name']
+    
+    def __str__(self):
+        return f"{self.name} ({self.interface_name})"
+    
+    def start(self):
+        """Запускає тунель"""
+        # Логіка запуску тунелю
+        pass
+    
+    def stop(self):
+        """Зупиняє тунель"""
+        # Логіка зупинки тунелю
+        pass
+    
+    def restart(self):
+        """Перезапускає тунель"""
+        self.stop()
+        self.start()
+
+
+class DeviceTOTP(models.Model):
+    """TOTP налаштування для пристрою"""
+    
+    device = models.OneToOneField(WireGuardPeer, on_delete=models.CASCADE, related_name='totp')
+    secret_key = models.CharField(max_length=32, verbose_name='Секретний ключ')
+    is_enabled = models.BooleanField(default=False, verbose_name='Увімкнено')
+    backup_tokens = models.JSONField(default=list, verbose_name='Резервні токени')
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        verbose_name = 'TOTP налаштування'
+        verbose_name_plural = 'TOTP налаштування'
+    
+    def __str__(self):
+        return f"TOTP для {self.device.name}"
+    
+    def generate_qr_uri(self):
+        """Генерує URI для QR коду"""
+        from urllib.parse import quote
+        issuer = "WireGuard Panel"
+        account = f"{self.device.name}@{self.device.server.network.name}"
+        return f"otpauth://totp/{quote(account)}?secret={self.secret_key}&issuer={quote(issuer)}"
+
+
+class FirewallRule(models.Model):
+    """Правило фаєрволу"""
+    
+    ACTION_CHOICES = [
+        ('allow', 'Дозволити'),
+        ('deny', 'Заборонити'),
+        ('log', 'Логувати'),
+    ]
+    
+    PROTOCOL_CHOICES = [
+        ('tcp', 'TCP'),
+        ('udp', 'UDP'),
+        ('icmp', 'ICMP'),
+        ('any', 'Будь-який'),
+    ]
+    
+    DIRECTION_CHOICES = [
+        ('in', 'Вхідний'),
+        ('out', 'Вихідний'),
+        ('both', 'Обидва'),
+    ]
+    
+    name = models.CharField(max_length=100, verbose_name='Назва правила')
+    network = models.ForeignKey(WireGuardNetwork, on_delete=models.CASCADE, related_name='firewall_rules')
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES, default='allow')
+    protocol = models.CharField(max_length=10, choices=PROTOCOL_CHOICES, default='any')
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default='both')
+    
+    source_ip = models.CharField(max_length=100, blank=True, verbose_name='IP джерела')
+    source_port = models.CharField(max_length=20, blank=True, verbose_name='Порт джерела')
+    destination_ip = models.CharField(max_length=100, blank=True, verbose_name='IP призначення')
+    destination_port = models.CharField(max_length=20, blank=True, verbose_name='Порт призначення')
+    
+    is_enabled = models.BooleanField(default=True, verbose_name='Увімкнено')
+    priority = models.IntegerField(default=100, verbose_name='Пріоритет')
+    description = models.TextField(blank=True, verbose_name='Опис')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Правило фаєрволу'
+        verbose_name_plural = 'Правила фаєрволу'
+        ordering = ['priority', 'name']
+    
+    def __str__(self):
+        return f"{self.name} ({self.action} {self.protocol})"
+    
+    def to_iptables_rule(self):
+        """Конвертує в правило iptables"""
+        # Логіка генерації iptables правила
+        pass
+
+
+class NetworkMonitoring(models.Model):
+    """Моніторинг мережі"""
+    
+    network = models.ForeignKey(WireGuardNetwork, on_delete=models.CASCADE, related_name='monitoring')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    # Статистика
+    total_devices = models.IntegerField(default=0)
+    active_devices = models.IntegerField(default=0)
+    total_traffic_bytes = models.BigIntegerField(default=0)
+    
+    # Системна інформація
+    cpu_usage = models.FloatField(null=True, blank=True)
+    memory_usage = models.FloatField(null=True, blank=True)
+    disk_usage = models.FloatField(null=True, blank=True)
+    
+    class Meta:
+        verbose_name = 'Моніторинг мережі'
+        verbose_name_plural = 'Моніторинг мереж'
+        ordering = ['-timestamp']
+    
+    def __str__(self):
+        return f"Моніторинг {self.network.name} - {self.timestamp}"

@@ -4,7 +4,8 @@ from . import views
 app_name = 'accounts'
 
 urlpatterns = [
-    path('', views.dashboard, name='dashboard'),
+    path('', views.vpn_overview, name='vpn_overview'),
+    path('dashboard/', views.vpn_overview, name='dashboard'),  # Backward compatibility
     path('login/', views.LoginView.as_view(), name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('register/', views.RegistrationView.as_view(), name='register'),

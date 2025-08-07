@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}Локації - Defguard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-6">
+        <div>
+            <h1 class="text-gray-800">
+                <i class="fas fa-map-marker-alt text-primary mr-2"></i>
+                Локації
+            </h1>
+            <p class="text-gray-600">Управління WireGuard локаціями та мережами</p>
+        </div>
+        <a href="{% url 'wireguard_management:location_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i>
+            Створити локацію
+        </a>
+    </div>
+
+    {% if locations %}
+    <div class="grid grid-cols-1 grid-cols-md-2 grid-cols-lg-3">
+        {% for location in locations %}
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-network-wired mr-2"></i>
+                        {{ location.name }}
+                    </h5>
+                    <div class="network-status">
+                        <div class="network-indicator {% if location.is_active %}active{% else %}inactive{% endif %}"></div>
+                        <span class="text-sm">
+                            {% if location.is_active %}Активна{% else %}Неактивна{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-body">
+                <div class="mb-4">
+                    {% if location.description %}
+                    <p class="text-gray-600 mb-2">{{ location.description }}</p>
+                    {% endif %}
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <span class="text-gray-500 text-sm">Підмережа:</span>
+                            <div class="font-mono text-sm">{{ location.subnet }}</div>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 text-sm">Сервер:</span>
+                            <div class="font-mono text-sm">{{ location.server_ip }}:{{ location.server_port }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-primary">{{ location.device_count }}</div>
+                        <div class="text-xs text-gray-500">Пристроїв</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-success">{{ location.user_count }}</div>
+                        <div class="text-xs text-gray-500">Користувачів</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-warning">0</div>
+                        <div class="text-xs text-gray-500">Онлайн</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-footer">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-gray-500">
+                        <i class="fas fa-clock mr-1"></i>
+                        {{ location.created_at|date:"d.m.Y" }}
+                    </small>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'wireguard_management:location_detail' location.pk %}" 
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <a href="{% url 'wireguard_management:location_edit' location.pk %}" 
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card text-center">
+        <div class="card-body">
+            <div class="mb-4">
+                <i class="fas fa-map-marker-alt text-gray-400" style="font-size: 4rem;"></i>
+            </div>
+            <h3 class="text-gray-600 mb-2">Локацій ще немає</h3>
+            <p class="text-gray-500 mb-4">Створіть першу локацію для початку роботи з WireGuard</p>
+            <a href="{% url 'wireguard_management:location_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus"></i>
+                Створити першу локацію
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

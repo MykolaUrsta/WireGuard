@@ -1,0 +1,35 @@
+<div class="popup-overlay" id="successPopup" style="display: none;">
+    <div class="popup-content success-popup">
+        <div class="popup-header">
+            <h3 class="popup-title">
+                <i class="fas fa-check-circle"></i>
+                Success
+            </h3>
+            <button class="popup-close" onclick="closeSuccessPopup()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="popup-body">
+            <p id="successMessage"></p>
+        </div>
+        <div class="popup-footer">
+            <button class="btn btn-primary" onclick="closeSuccessPopup()">OK</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function showSuccessPopup(message) {
+    document.getElementById('successMessage').textContent = message;
+    document.getElementById('successPopup').style.display = 'flex';
+}
+
+function closeSuccessPopup() {
+    document.getElementById('successPopup').style.display = 'none';
+}
+
+// Auto close after 3 seconds
+setTimeout(function() {
+    closeSuccessPopup();
+}, 3000);
+</script>

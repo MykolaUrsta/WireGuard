@@ -106,14 +106,62 @@ class Verify2FAView(View):
 
 
 @login_required
-def dashboard(request):
-    """Головна панель управління"""
+def vpn_overview(request):
+    """VPN Overview - головна сторінка з статистикою мережі"""
+    from wireguard_management.models import WireGuardPeer, WireGuardNetwork, WireGuardServer
+    from audit_logging.models import VPNConnectionLog, UserActionLog
+    from django.db.models import Count, Q
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    # Статистика підключень
+    total_peers = WireGuardPeer.objects.count()
+    active_connections = WireGuardPeer.objects.filter(is_active=True).count()
+    
+    # Статистика за 24 години
+    last_24h = timezone.now() - timedelta(hours=24)
+    connections_24h = VPNConnectionLog.objects.filter(
+        connect_time__gte=last_24h
+    ).count()
+    
+    # Навантаження мережі (умовно)
+    network_load = min(85, (active_connections / max(total_peers, 1)) * 100)
+    
+    # Активні користувачі з детальною інформацією
+    connected_users = WireGuardPeer.objects.filter(
+        is_active=True
+    ).select_related('user', 'server').order_by('-last_handshake')[:10]
+    
+    # Активність користувачів
+    recent_activity = UserActionLog.objects.filter(
+        timestamp__gte=last_24h
+    ).select_related('user').order_by('-timestamp')[:15]
+    
+    # Статистика трафіку
+    total_traffic_in = sum(peer.bytes_received or 0 for peer in WireGuardPeer.objects.all())
+    total_traffic_out = sum(peer.bytes_sent or 0 for peer in WireGuardPeer.objects.all())
+    
     context = {
         'user': request.user,
-        'wireguard_enabled': request.user.is_wireguard_enabled,
-        'has_2fa': request.user.is_2fa_enabled,
+        # Основна статистика
+        'active_connections': active_connections,
+        'connections_24h': connections_24h,
+        'network_load': round(network_load),
+        'total_peers': total_peers,
+        
+        # Трафік
+        'traffic_in_mb': round(total_traffic_in / (1024 * 1024), 1) if total_traffic_in else 0,
+        'traffic_out_mb': round(total_traffic_out / (1024 * 1024), 1) if total_traffic_out else 0,
+        
+        # Підключені користувачі
+        'connected_users': connected_users,
+        'recent_activity': recent_activity,
+        
+        # Мережі та сервери
+        'networks': WireGuardNetwork.objects.all()[:5],
+        'servers': WireGuardServer.objects.all()[:5],
     }
-    return render(request, 'accounts/dashboard.html', context)
+    return render(request, 'accounts/vpn_overview.html', context)
 
 
 @login_required

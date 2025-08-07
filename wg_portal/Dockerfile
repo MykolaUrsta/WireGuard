@@ -1,4 +1,7 @@
+
 FROM python:3.11-slim as base
+# Додаємо PYTHONPATH для коректного імпорту wg_portal
+ENV PYTHONPATH=/app
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -29,7 +32,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Create necessary directories with proper permissions
-RUN mkdir -p /app/logs /app/staticfiles /app/media /app/wireguard_configs \
+RUN mkdir -p /app/logs /app/assets /app/media /app/wireguard_configs \
     && chown -R app:app /app
 
 # Copy application code (this will change most often)

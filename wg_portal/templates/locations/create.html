@@ -1,0 +1,267 @@
+{% extends 'layouts/index.html' %}
+{% load static %}
+
+{% block title %}Створити локацію{% endblock %}
+{% block page_title %}Create Location{% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h1 class="h3 mb-1">Створити локацію</h1>
+                        <p class="text-muted">Налаштування нової WireGuard локації з автоматичним створенням мережі</p>
+                    </div>
+                    <a href="{% url 'locations:list' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Назад до списку
+                    </a>
+                </div>
+
+                <!-- Form Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-map-marker-alt me-2"></i>
+                            Конфігурація локації
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="post" id="locationForm">
+                            {% csrf_token %}
+                            
+                            <!-- Основні налаштування локації -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <h6 class="text-primary mb-3">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        Основні налаштування
+                                    </h6>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.name.id_for_label }}" class="form-label">
+                                            {{ form.name.label }} <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.name }}
+                                        {% if form.name.errors %}
+                                            <div class="text-danger small mt-1">{{ form.name.errors.0 }}</div>
+                                        {% endif %}
+                                        {% if form.name.help_text %}
+                                            <div class="form-text">{{ form.name.help_text }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.server_ip.id_for_label }}" class="form-label">
+                                            {{ form.server_ip.label }} <span class="text-danger">*</span>
+                                        </label>
+                                        {{ form.server_ip }}
+                                        {% if form.server_ip.errors %}
+                                            <div class="text-danger small mt-1">{{ form.server_ip.errors.0 }}</div>
+                                        {% endif %}
+                                        {% if form.server_ip.help_text %}
+                                            <div class="form-text">{{ form.server_ip.help_text }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.server_port.id_for_label }}" class="form-label">
+                                            {{ form.server_port.label }}
+                                        </label>
+                                        {{ form.server_port }}
+                                        {% if form.server_port.errors %}
+                                            <div class="text-danger small mt-1">{{ form.server_port.errors.0 }}</div>
+                                        {% endif %}
+                                        {% if form.server_port.help_text %}
+                                            <div class="form-text">{{ form.server_port.help_text }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            {{ form.is_active }}
+                                            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                                {{ form.is_active.label }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-12">
+                                    <div class="mb-3">
+                                        <label for="{{ form.description.id_for_label }}" class="form-label">
+                                            {{ form.description.label }}
+                                        </label>
+                                        {{ form.description }}
+                                        {% if form.description.errors %}
+                                            <div class="text-danger small mt-1">{{ form.description.errors.0 }}</div>
+                                        {% endif %}
+                                        {% if form.description.help_text %}
+                                            <div class="form-text">{{ form.description.help_text }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Налаштування WireGuard мережі -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <h6 class="text-primary mb-3">
+                                        <i class="fas fa-network-wired me-2"></i>
+                                        Налаштування WireGuard мережі
+                                    </h6>
+                                </div>
+                                
+                                <div class="col-12 mb-3">
+                                    <div class="form-check">
+                                        {{ form.create_network }}
+                                        <label class="form-check-label" for="{{ form.create_network.id_for_label }}">
+                                            {{ form.create_network.label }}
+                                        </label>
+                                        {% if form.create_network.help_text %}
+                                            <div class="form-text">{{ form.create_network.help_text }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div id="networkSettings" class="col-12">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="{{ form.network_name.id_for_label }}" class="form-label">
+                                                    {{ form.network_name.label }}
+                                                </label>
+                                                {{ form.network_name }}
+                                                {% if form.network_name.errors %}
+                                                    <div class="text-danger small mt-1">{{ form.network_name.errors.0 }}</div>
+                                                {% endif %}
+                                                {% if form.network_name.help_text %}
+                                                    <div class="form-text">{{ form.network_name.help_text }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="{{ form.network_subnet.id_for_label }}" class="form-label">
+                                                    {{ form.network_subnet.label }}
+                                                </label>
+                                                {{ form.network_subnet }}
+                                                {% if form.network_subnet.errors %}
+                                                    <div class="text-danger small mt-1">{{ form.network_subnet.errors.0 }}</div>
+                                                {% endif %}
+                                                {% if form.network_subnet.help_text %}
+                                                    <div class="form-text">{{ form.network_subnet.help_text }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="{{ form.interface_name.id_for_label }}" class="form-label">
+                                                    {{ form.interface_name.label }}
+                                                </label>
+                                                {{ form.interface_name }}
+                                                {% if form.interface_name.errors %}
+                                                    <div class="text-danger small mt-1">{{ form.interface_name.errors.0 }}</div>
+                                                {% endif %}
+                                                {% if form.interface_name.help_text %}
+                                                    <div class="form-text">{{ form.interface_name.help_text }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="{{ form.dns_servers.id_for_label }}" class="form-label">
+                                                    {{ form.dns_servers.label }}
+                                                </label>
+                                                {{ form.dns_servers }}
+                                                {% if form.dns_servers.errors %}
+                                                    <div class="text-danger small mt-1">{{ form.dns_servers.errors.0 }}</div>
+                                                {% endif %}
+                                                {% if form.dns_servers.help_text %}
+                                                    <div class="form-text">{{ form.dns_servers.help_text }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-12">
+                                            <div class="form-check">
+                                                {{ form.apply_to_wireguard }}
+                                                <label class="form-check-label" for="{{ form.apply_to_wireguard.id_for_label }}">
+                                                    {{ form.apply_to_wireguard.label }}
+                                                </label>
+                                                {% if form.apply_to_wireguard.help_text %}
+                                                    <div class="form-text">{{ form.apply_to_wireguard.help_text }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Кнопки -->
+                            <div class="row">
+                                <div class="col-12">
+                                    <hr class="mb-4">
+                                    <div class="d-flex justify-content-end gap-2">
+                                        <a href="{% url 'locations:list' %}" class="btn btn-outline-secondary">
+                                            <i class="fas fa-times me-2"></i>Скасувати
+                                        </a>
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-save me-2"></i>Створити локацію
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const createNetworkCheckbox = document.getElementById('{{ form.create_network.id_for_label }}');
+    const networkSettings = document.getElementById('networkSettings');
+    const nameField = document.getElementById('{{ form.name.id_for_label }}');
+    const networkNameField = document.getElementById('{{ form.network_name.id_for_label }}');
+    
+    // Функція для показу/приховання налаштувань мережі
+    function toggleNetworkSettings() {
+        if (createNetworkCheckbox.checked) {
+            networkSettings.style.display = 'block';
+        } else {
+            networkSettings.style.display = 'none';
+        }
+    }
+    
+    // Автоматичне заповнення назви мережі
+    function updateNetworkName() {
+        if (nameField.value && !networkNameField.value) {
+            networkNameField.value = nameField.value + ' Network';
+        }
+    }
+    
+    // Ініціалізація
+    toggleNetworkSettings();
+    
+    // Події
+    createNetworkCheckbox.addEventListener('change', toggleNetworkSettings);
+    nameField.addEventListener('input', updateNetworkName);
+});
+</script>
+{% endblock %}

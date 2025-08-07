@@ -1,0 +1,51 @@
+<!-- Sidebar -->
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <div class="logo">
+            <i class="fas fa-shield-alt text-primary"></i>
+            <span class="logo-text">WireGuard</span>
+        </div>
+    </div>
+    
+    <nav class="sidebar-nav">
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a href="{% url 'accounts:vpn_overview' %}" class="nav-link {% if request.resolver_match.url_name == 'vpn_overview' %}active{% endif %}">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>Огляд VPN</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{% url 'accounts:dashboard' %}" class="nav-link">
+                    <i class="fas fa-users"></i>
+                    <span>Користувачі</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{% url 'locations:list' %}" class="nav-link {% if request.resolver_match.url_name == 'list' or 'locations' in request.resolver_match.app_name %}active{% endif %}">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span>Локації</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#" class="nav-link">
+                    <i class="fas fa-user"></i>
+                    <span>Мій профіль</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#" class="nav-link">
+                    <i class="fas fa-cog"></i>
+                    <span>Налаштування</span>
+                </a>
+            </li>
+        </ul>
+        
+        <div class="sidebar-footer">
+            <a href="{% url 'accounts:logout' %}" class="nav-link logout-link">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Вийти</span>
+            </a>
+        </div>
+    </nav>
+</aside>

@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django_otp.plugins.otp_static',
     'accounts',
     'wireguard_management',
+    'locations',
     'audit_logging',
 ]
 
@@ -134,8 +135,11 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = '/static/'
+STATIC_URL = '/assets/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [
+    BASE_DIR / 'assets',
+]
 
 # Media files
 MEDIA_URL = '/media/'

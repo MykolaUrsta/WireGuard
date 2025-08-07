@@ -1,12 +1,19 @@
+
 from django.contrib import admin
 from django.utils.html import format_html
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import path, reverse
 from django.utils.safestring import mark_safe
-from .models import WireGuardNetwork, WireGuardServer, WireGuardPeer
+from .models import PeerMonitoring, WireGuardNetwork, WireGuardServer, WireGuardPeer
 import subprocess
 import json
+
+@admin.register(PeerMonitoring)
+class PeerMonitoringAdmin(admin.ModelAdmin):
+    list_display = ('peer', 'timestamp', 'bytes_sent', 'bytes_received')
+    list_filter = ('peer',)
+    search_fields = ('peer__name', 'peer__ip_address')
 
 
 @admin.register(WireGuardNetwork)

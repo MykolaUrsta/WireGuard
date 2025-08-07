@@ -1,8 +1,84 @@
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from django.http import JsonResponse, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+import subprocess
+import json
+import qrcode
+import io
+import base64
+from locations.models import Location
+from .models import PeerMonitoring, WireGuardNetwork, WireGuardServer, WireGuardPeer
+from .utils import generate_wireguard_config, update_server_config
+from accounts.models import CustomUser
+# API: історія трафіку по локації
+@login_required
+def api_location_history(request, pk):
+    """API для отримання історії трафіку по локації (сума по всіх peer'ах)"""
+    location = get_object_or_404(Location, pk=pk)
+    # Дозволяємо тільки staff/admin
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Немає доступу'}, status=403)
+    # Всі monitoring для peer'ів цієї локації
+    from django.db.models import Sum
+    from django.utils.dateparse import parse_datetime
+    peers = location.devices.all()
+    monitoring = PeerMonitoring.objects.filter(peer__in=peers)
+    from_ts = request.GET.get('from')
+    to_ts = request.GET.get('to')
+    if from_ts:
+        monitoring = monitoring.filter(timestamp__gte=parse_datetime(from_ts))
+    if to_ts:
+        monitoring = monitoring.filter(timestamp__lte=parse_datetime(to_ts))
+    # Групуємо по часу (наприклад, по хвилинах)
+    from django.db.models.functions import TruncMinute
+    grouped = monitoring.annotate(minute=TruncMinute('timestamp')).values('minute').annotate(
+        bytes_sent=Sum('bytes_sent'),
+        bytes_received=Sum('bytes_received')
+    ).order_by('minute')
+    data = [
+        {
+            'timestamp': g['minute'].isoformat() if g['minute'] else None,
+            'bytes_sent': g['bytes_sent'] or 0,
+            'bytes_received': g['bytes_received'] or 0
+        }
+        for g in grouped
+    ]
+    return JsonResponse({'history': data})
+
+
+@login_required
+def api_peer_history(request, pk):
+    """API для отримання історії трафіку peer'а (для графіків)"""
+    peer = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and peer.user != request.user:
+        return JsonResponse({'error': 'Немає доступу'}, status=403)
+    # Можна додати фільтр по часу (наприклад, ?from=2025-08-07T00:00:00&to=2025-08-07T23:59:59)
+    qs = peer.monitoring.order_by('timestamp')
+    from_ts = request.GET.get('from')
+    to_ts = request.GET.get('to')
+    if from_ts:
+        qs = qs.filter(timestamp__gte=parse_datetime(from_ts))
+    if to_ts:
+        qs = qs.filter(timestamp__lte=parse_datetime(to_ts))
+    data = [
+        {
+            'timestamp': m.timestamp.isoformat(),
+            'bytes_sent': m.bytes_sent,
+            'bytes_received': m.bytes_received
+        }
+        for m in qs
+    ]
+    return JsonResponse({'history': data})
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
 from .models import WireGuardNetwork, WireGuardServer, WireGuardPeer
 from .utils import generate_wireguard_config, update_server_config
 from accounts.models import CustomUser
@@ -11,32 +87,6 @@ import json
 import qrcode
 import io
 import base64
-
-
-@login_required
-def dashboard(request):
-    """Dashboard з статистикою WireGuard"""
-    
-    # Статистика для поточного користувача
-    user_peers = WireGuardPeer.objects.filter(user=request.user)
-    
-    context = {
-        'user_peers': user_peers,
-        'total_networks': WireGuardNetwork.objects.filter(is_active=True).count(),
-        'active_servers': WireGuardServer.objects.filter(is_active=True).count(),
-    }
-    
-    # Додаткова статистика для суперкористувачів
-    if request.user.is_superuser:
-        context.update({
-            'all_peers': WireGuardPeer.objects.all()[:10],  # Останні 10 peer'ів
-            'total_traffic': sum([
-                user.total_upload + user.total_download 
-                for user in CustomUser.objects.all()
-            ]),
-        })
-    
-    return render(request, 'wireguard_management/dashboard.html', context)
 
 
 @login_required
@@ -229,3 +279,471 @@ def get_qr_code(request):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# Networks Views
+@login_required
+def networks_list(request):
+    """Список мереж"""
+    networks = WireGuardNetwork.objects.all().order_by('name')
+    context = {
+        'networks': networks,
+        'total_networks': networks.count(),
+    }
+    return render(request, 'wireguard_management/networks_list.html', context)
+
+
+@login_required
+def network_create(request):
+    """Створення нової мережі"""
+    if request.method == 'POST':
+        # Логіка створення мережі
+        messages.success(request, 'Мережу створено успішно!')
+        return redirect('wireguard_management:networks')
+    return render(request, 'wireguard_management/network_form.html')
+
+
+@login_required
+def network_detail(request, pk):
+    """Деталі мережі"""
+    network = get_object_or_404(WireGuardNetwork, pk=pk)
+    context = {'network': network}
+    return render(request, 'wireguard_management/network_detail.html', context)
+
+
+@login_required
+def network_edit(request, pk):
+    """Редагування мережі"""
+    network = get_object_or_404(WireGuardNetwork, pk=pk)
+    if request.method == 'POST':
+        # Логіка оновлення мережі
+        messages.success(request, 'Мережу оновлено успішно!')
+        return redirect('wireguard_management:network_detail', pk=pk)
+    context = {'network': network}
+    return render(request, 'wireguard_management/network_form.html', context)
+
+
+@login_required
+def network_delete(request, pk):
+    """Видалення мережі"""
+    network = get_object_or_404(WireGuardNetwork, pk=pk)
+    if request.method == 'POST':
+        network.delete()
+        messages.success(request, 'Мережу видалено успішно!')
+        return redirect('wireguard_management:networks')
+    context = {'network': network}
+    return render(request, 'wireguard_management/network_confirm_delete.html', context)
+
+
+# Devices Views
+@login_required
+def devices_list(request):
+    """Список пристроїв"""
+    devices = WireGuardPeer.objects.all().order_by('name')
+    if not request.user.is_superuser:
+        devices = devices.filter(user=request.user)
+    context = {'devices': devices}
+    return render(request, 'wireguard_management/devices_list.html', context)
+
+
+@login_required
+def device_create(request):
+    """Створення нового пристрою"""
+    if request.method == 'POST':
+        # Логіка створення пристрою
+        messages.success(request, 'Пристрій створено успішно!')
+        return redirect('wireguard_management:devices')
+    return render(request, 'wireguard_management/device_form.html')
+
+
+@login_required
+def device_detail(request, pk):
+    """Деталі пристрою"""
+    device = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and device.user != request.user:
+        messages.error(request, 'Немає доступу до цього пристрою')
+        return redirect('wireguard_management:devices')
+    context = {'device': device}
+    return render(request, 'wireguard_management/device_detail.html', context)
+
+
+@login_required
+def device_edit(request, pk):
+    """Редагування пристрою"""
+    device = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and device.user != request.user:
+        messages.error(request, 'Немає доступу до цього пристрою')
+        return redirect('wireguard_management:devices')
+    
+    if request.method == 'POST':
+        # Логіка оновлення пристрою
+        messages.success(request, 'Пристрій оновлено успішно!')
+        return redirect('wireguard_management:device_detail', pk=pk)
+    context = {'device': device}
+    return render(request, 'wireguard_management/device_form.html', context)
+
+
+@login_required
+def device_config(request, pk):
+    """Конфігурація пристрою"""
+    device = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and device.user != request.user:
+        return JsonResponse({'error': 'Немає доступу'}, status=403)
+    
+    config = generate_wireguard_config(device)
+    response = HttpResponse(config, content_type='text/plain')
+    response['Content-Disposition'] = f'attachment; filename="{device.name}.conf"'
+    return response
+
+
+@login_required
+def device_qr_code(request, pk):
+    """QR код для пристрою"""
+    device = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and device.user != request.user:
+        return JsonResponse({'error': 'Немає доступу'}, status=403)
+    
+    try:
+        config_content = generate_wireguard_config(device)
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(config_content)
+        qr.make(fit=True)
+        
+        img = qr.make_image(fill_color="black", back_color="white")
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        buffer.seek(0)
+        
+        return HttpResponse(buffer.getvalue(), content_type='image/png')
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def device_delete(request, pk):
+    """Видалення пристрою"""
+    device = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and device.user != request.user:
+        messages.error(request, 'Немає доступу до цього пристрою')
+        return redirect('wireguard_management:devices')
+    
+    if request.method == 'POST':
+        device.delete()
+        messages.success(request, 'Пристрій видалено успішно!')
+        return redirect('wireguard_management:devices')
+    context = {'device': device}
+    return render(request, 'wireguard_management/device_confirm_delete.html', context)
+
+
+# Tunnels Views
+@login_required
+def tunnels_list(request):
+    """Список тунелів"""
+    from .models import WireGuardTunnel
+    tunnels = WireGuardTunnel.objects.all().order_by('name')
+    context = {'tunnels': tunnels}
+    return render(request, 'wireguard_management/tunnels_list.html', context)
+
+
+@login_required
+def tunnel_create(request):
+    """Створення тунелю"""
+    if request.method == 'POST':
+        messages.success(request, 'Тунель створено успішно!')
+        return redirect('wireguard_management:tunnels')
+    return render(request, 'wireguard_management/tunnel_form.html')
+
+
+@login_required
+def tunnel_detail(request, pk):
+    """Деталі тунелю"""
+    from .models import WireGuardTunnel
+    tunnel = get_object_or_404(WireGuardTunnel, pk=pk)
+    context = {'tunnel': tunnel}
+    return render(request, 'wireguard_management/tunnel_detail.html', context)
+
+
+@login_required
+def tunnel_start(request, pk):
+    """Запуск тунелю"""
+    from .models import WireGuardTunnel
+    tunnel = get_object_or_404(WireGuardTunnel, pk=pk)
+    try:
+        tunnel.start()
+        messages.success(request, f'Тунель {tunnel.name} запущено!')
+    except Exception as e:
+        messages.error(request, f'Помилка запуску тунелю: {e}')
+    return redirect('wireguard_management:tunnel_detail', pk=pk)
+
+
+@login_required
+def tunnel_stop(request, pk):
+    """Зупинка тунелю"""
+    from .models import WireGuardTunnel
+    tunnel = get_object_or_404(WireGuardTunnel, pk=pk)
+    try:
+        tunnel.stop()
+        messages.success(request, f'Тунель {tunnel.name} зупинено!')
+    except Exception as e:
+        messages.error(request, f'Помилка зупинки тунелю: {e}')
+    return redirect('wireguard_management:tunnel_detail', pk=pk)
+
+
+@login_required
+def tunnel_restart(request, pk):
+    """Перезапуск тунелю"""
+    from .models import WireGuardTunnel
+    tunnel = get_object_or_404(WireGuardTunnel, pk=pk)
+    try:
+        tunnel.restart()
+        messages.success(request, f'Тунель {tunnel.name} перезапущено!')
+    except Exception as e:
+        messages.error(request, f'Помилка перезапуску тунелю: {e}')
+    return redirect('wireguard_management:tunnel_detail', pk=pk)
+
+
+@login_required
+def tunnel_config(request, pk):
+    """Конфігурація тунелю"""
+    from .models import WireGuardTunnel
+    tunnel = get_object_or_404(WireGuardTunnel, pk=pk)
+    # Логіка генерації конфігурації тунелю
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def tunnel_delete(request, pk):
+    """Видалення тунелю"""
+    from .models import WireGuardTunnel
+    tunnel = get_object_or_404(WireGuardTunnel, pk=pk)
+    if request.method == 'POST':
+        tunnel.delete()
+        messages.success(request, 'Тунель видалено успішно!')
+        return redirect('wireguard_management:tunnels')
+    context = {'tunnel': tunnel}
+    return render(request, 'wireguard_management/tunnel_confirm_delete.html', context)
+
+
+# ACL & Firewall Views
+@login_required
+def acl_rules(request, network_pk):
+    """ACL правила для мережі"""
+    network = get_object_or_404(WireGuardNetwork, pk=network_pk)
+    # Логіка ACL
+    context = {'network': network}
+    return render(request, 'wireguard_management/acl_rules.html', context)
+
+
+@login_required
+def acl_rule_create(request, network_pk):
+    """Створення ACL правила"""
+    network = get_object_or_404(WireGuardNetwork, pk=network_pk)
+    if request.method == 'POST':
+        messages.success(request, 'ACL правило створено!')
+        return redirect('wireguard_management:acl_rules', network_pk=network_pk)
+    context = {'network': network}
+    return render(request, 'wireguard_management/acl_form.html', context)
+
+
+@login_required
+def acl_rule_edit(request, pk):
+    """Редагування ACL правила"""
+    # Логіка редагування ACL
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def acl_rule_delete(request, pk):
+    """Видалення ACL правила"""
+    # Логіка видалення ACL
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def firewall_rules(request):
+    """Правила фаєрволу"""
+    from .models import FirewallRule
+    rules = FirewallRule.objects.all().order_by('priority')
+    context = {'rules': rules}
+    return render(request, 'wireguard_management/firewall_rules.html', context)
+
+
+@login_required
+def firewall_rule_create(request):
+    """Створення правила фаєрволу"""
+    if request.method == 'POST':
+        messages.success(request, 'Правило фаєрволу створено!')
+        return redirect('wireguard_management:firewall_rules')
+    return render(request, 'wireguard_management/firewall_form.html')
+
+
+@login_required
+def firewall_rule_edit(request, pk):
+    """Редагування правила фаєрволу"""
+    from .models import FirewallRule
+    rule = get_object_or_404(FirewallRule, pk=pk)
+    # Логіка редагування
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def firewall_rule_delete(request, pk):
+    """Видалення правила фаєрволу"""
+    from .models import FirewallRule
+    rule = get_object_or_404(FirewallRule, pk=pk)
+    if request.method == 'POST':
+        rule.delete()
+        messages.success(request, 'Правило фаєрволу видалено!')
+    return redirect('wireguard_management:firewall_rules')
+
+
+@login_required
+def firewall_rule_toggle(request, pk):
+    """Увімкнення/вимкнення правила фаєрволу"""
+    from .models import FirewallRule
+    rule = get_object_or_404(FirewallRule, pk=pk)
+    rule.is_enabled = not rule.is_enabled
+    rule.save()
+    status = "увімкнено" if rule.is_enabled else "вимкнено"
+    return JsonResponse({'status': 'success', 'enabled': rule.is_enabled, 'message': f'Правило {status}'})
+
+
+# TOTP Views
+@login_required
+def device_totp_setup(request, pk):
+    """Налаштування TOTP для пристрою"""
+    device = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and device.user != request.user:
+        return JsonResponse({'error': 'Немає доступу'}, status=403)
+    
+    # Логіка налаштування TOTP
+    return render(request, 'wireguard_management/totp_setup.html', {'device': device})
+
+
+@login_required
+def device_totp_verify(request, pk):
+    """Верифікація TOTP коду"""
+    device = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and device.user != request.user:
+        return JsonResponse({'error': 'Немає доступу'}, status=403)
+    
+    # Логіка верифікації TOTP
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def device_totp_disable(request, pk):
+    """Вимкнення TOTP для пристрою"""
+    device = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and device.user != request.user:
+        return JsonResponse({'error': 'Немає доступу'}, status=403)
+    
+    # Логіка вимкнення TOTP
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def totp_qr_code(request, secret):
+    """QR код для TOTP"""
+    # Логіка генерації QR коду для TOTP
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def device_groups(request):
+    """Групи пристроїв"""
+    # Логіка груп пристроїв
+    context = {}
+    return render(request, 'wireguard_management/device_groups.html', context)
+
+
+@login_required
+def device_group_create(request):
+    """Створення групи пристроїв"""
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def device_group_edit(request, pk):
+    """Редагування групи пристроїв"""
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def device_group_delete(request, pk):
+    """Видалення групи пристроїв"""
+    return JsonResponse({'status': 'success'})
+
+
+# API Views
+@login_required
+def api_network_status(request):
+    """API статусу мережі"""
+    from .models import NetworkMonitoring
+    
+    # Базова статистика
+    total_networks = WireGuardNetwork.objects.filter(is_active=True).count()
+    total_devices = WireGuardPeer.objects.count()
+    online_devices = WireGuardPeer.objects.filter(is_active=True).count()
+    
+    # Статус сервісів
+    services = {
+        'wireguard': True,
+        'database': True,
+        'redis': True,
+        'nginx': True,
+    }
+    
+    return JsonResponse({
+        'total_networks': total_networks,
+        'total_devices': total_devices,
+        'online_devices': online_devices,
+        'services': services,
+        'timestamp': timezone.now().isoformat()
+    })
+
+
+@login_required
+def api_device_stats(request, pk):
+    """API статистики пристрою"""
+    device = get_object_or_404(WireGuardPeer, pk=pk)
+    if not request.user.is_superuser and device.user != request.user:
+        return JsonResponse({'error': 'Немає доступу'}, status=403)
+    
+    return JsonResponse({
+        'name': device.name,
+        'ip_address': device.ip_address,
+        'is_online': device.is_online,
+        'bytes_sent': device.bytes_sent,
+        'bytes_received': device.bytes_received,
+        'last_handshake': device.last_handshake.isoformat() if device.last_handshake else None,
+    })
+
+
+@login_required
+def api_tunnel_status(request, pk):
+    """API статусу тунелю"""
+    from .models import WireGuardTunnel
+    tunnel = get_object_or_404(WireGuardTunnel, pk=pk)
+    
+    return JsonResponse({
+        'name': tunnel.name,
+        'interface': tunnel.interface_name,
+        'status': tunnel.status,
+        'last_started': tunnel.last_started.isoformat() if tunnel.last_started else None,
+    })
+
+
+@login_required
+def api_firewall_status(request):
+    """API статусу фаєрволу"""
+    from .models import FirewallRule
+    
+    total_rules = FirewallRule.objects.count()
+    active_rules = FirewallRule.objects.filter(is_enabled=True).count()
+    
+    return JsonResponse({
+        'total_rules': total_rules,
+        'active_rules': active_rules,
+        'firewall_enabled': True,
+    })

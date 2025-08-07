@@ -1,105 +1,225 @@
-{% extends 'base.html' %}
+{% extends 'layouts/index.html' %}
 
-{% block title %}Налаштування 2FA - WireGuard Manager{% endblock %}
+{% block title %}Two-Factor Authentication - Defguard{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header bg-success text-white">
-                    <h4 class="mb-0">
-                        <i class="fas fa-key"></i> Налаштування двофакторної автентифікації
-                    </h4>
+<div class="container">
+    <div style="max-width: 600px; margin: 0 auto;">
+        <!-- Header -->
+        <div class="mb-6 text-center">
+            <h1 style="font-size: 2.5rem; font-weight: 700; color: var(--gray-800); margin-bottom: 0.5rem;">
+                <i class="fas fa-shield-alt text-primary"></i>
+                Two-Factor Authentication
+            </h1>
+            <p style="color: var(--gray-600); font-size: 1.125rem;">
+                Enhance your account security with 2FA
+            </p>
+        </div>
+
+        {% if user.is_2fa_enabled %}
+        <!-- 2FA Already Enabled -->
+        <div class="card">
+            <div class="card-header" style="background: var(--success-color);">
+                <h5 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-check-circle"></i>
+                    2FA is Active
+                </h5>
+            </div>
+            <div class="card-body text-center">
+                <div style="font-size: 4rem; color: var(--success-color); margin-bottom: 1.5rem;">
+                    <i class="fas fa-shield-check"></i>
                 </div>
-                <div class="card-body">
-                    {% if user.is_2fa_enabled %}
-                        <div class="alert alert-success">
-                            <i class="fas fa-check-circle"></i>
-                            Двофакторна автентифікація вже увімкнена для вашого акаунту
-                        </div>
-                        <a href="{% url 'accounts:disable_2fa' %}" class="btn btn-outline-danger">
-                            <i class="fas fa-times"></i> Вимкнути 2FA
-                        </a>
-                    {% else %}
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h5>Крок 1: Відскануйте QR код</h5>
-                                <p>Відскануйте цей QR код за допомогою додатка автентифікації (Google Authenticator, Authy, тощо):</p>
-                                
-                                <div class="text-center mb-3">
-                                    <img src="data:image/png;base64,{{ qr_image }}" class="qr-code img-fluid border" alt="QR код для 2FA">
-                                </div>
-                                
-                                <div class="alert alert-info">
-                                    <strong>Або введіть цей ключ вручну:</strong><br>
-                                    <code>{{ secret_key }}</code>
-                                </div>
-                            </div>
-                            
-                            <div class="col-md-6">
-                                <h5>Крок 2: Введіть код підтвердження</h5>
-                                <p>Введіть 6-значний код з вашого додатка автентифікації для підтвердження налаштування:</p>
-                                
-                                <form method="post">
-                                    {% csrf_token %}
-                                    
-                                    <div class="mb-3">
-                                        <label for="token" class="form-label">Код автентифікації</label>
-                                        <input type="text" 
-                                               class="form-control form-control-lg text-center" 
-                                               id="token" 
-                                               name="token" 
-                                               placeholder="000000" 
-                                               pattern="[0-9]{6}" 
-                                               maxlength="6" 
-                                               required
-                                               autofocus>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="device_name" class="form-label">Назва пристрою</label>
-                                        <input type="text" 
-                                               class="form-control" 
-                                               id="device_name" 
-                                               name="device_name" 
-                                               value="Мобільний пристрій"
-                                               required>
-                                    </div>
-                                    
-                                    <button type="submit" class="btn btn-success w-100">
-                                        <i class="fas fa-check"></i> Увімкнути 2FA
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                        
-                        <hr>
-                        
-                        <div class="alert alert-warning">
-                            <h6><i class="fas fa-exclamation-triangle"></i> Важливо!</h6>
-                            <ul class="mb-0">
-                                <li>Переконайтеся, що час на вашому пристрої синхронізований</li>
-                                <li>Зберігайте резервні коди в безпечному місці</li>
-                                <li>Налаштуйте 2FA на кількох пристроях для резервування</li>
-                            </ul>
-                        </div>
-                    {% endif %}
-                </div>
-                <div class="card-footer">
-                    <a href="{% url 'accounts:dashboard' %}" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left"></i> Повернутися до панелі
+                <h3 style="color: var(--gray-800); margin-bottom: 1rem;">Your account is protected</h3>
+                <p style="color: var(--gray-600); margin-bottom: 2rem;">
+                    Two-factor authentication is currently enabled for your account. 
+                    This provides an additional layer of security.
+                </p>
+                
+                <div class="d-flex gap-2 justify-content-center">
+                    <a href="{% url 'accounts:dashboard' %}" class="btn btn-primary">
+                        <i class="fas fa-arrow-left"></i>
+                        Back to Dashboard
+                    </a>
+                    <a href="{% url 'accounts:disable_2fa' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-times"></i>
+                        Disable 2FA
                     </a>
                 </div>
             </div>
         </div>
+        {% else %}
+        <!-- 2FA Setup -->
+        <div class="card">
+            <div class="card-header">
+                <h5 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-mobile-alt"></i>
+                    Setup Two-Factor Authentication
+                </h5>
+            </div>
+            <div class="card-body">
+                <div style="display: grid; gap: 2rem;">
+                    <!-- Step 1: Download App -->
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="width: 40px; height: 40px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700;">
+                                1
+                            </div>
+                            <h4 style="margin: 0; color: var(--gray-800);">Download Authenticator App</h4>
+                        </div>
+                        <p style="color: var(--gray-600); margin-bottom: 1rem;">
+                            Download an authenticator app on your mobile device. We recommend:
+                        </p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div style="border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 1rem; text-align: center;">
+                                <i class="fab fa-google-play" style="font-size: 2rem; color: #34A853; margin-bottom: 0.5rem;"></i>
+                                <div style="font-weight: 500;">Google Authenticator</div>
+                                <div style="font-size: 0.875rem; color: var(--gray-600);">Free on Play Store</div>
+                            </div>
+                            <div style="border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 1rem; text-align: center;">
+                                <i class="fab fa-app-store" style="font-size: 2rem; color: #007AFF; margin-bottom: 0.5rem;"></i>
+                                <div style="font-weight: 500;">Authy</div>
+                                <div style="font-size: 0.875rem; color: var(--gray-600);">Free on App Store</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Scan QR Code -->
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="width: 40px; height: 40px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700;">
+                                2
+                            </div>
+                            <h4 style="margin: 0; color: var(--gray-800);">Scan QR Code</h4>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr auto; gap: 2rem; align-items: center;">
+                            <div>
+                                <p style="color: var(--gray-600); margin-bottom: 1rem;">
+                                    Open your authenticator app and scan this QR code to add your Defguard account:
+                                </p>
+                                <div style="background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 1rem;">
+                                    <div style="font-weight: 500; margin-bottom: 0.5rem;">Secret Key:</div>
+                                    <code style="font-family: 'Courier New', monospace; font-size: 0.875rem; background: var(--gray-100); padding: 0.5rem; border-radius: 4px; display: block; word-break: break-all;">
+                                        {{ secret_key|default:"JBSWY3DPEHPK3PXP" }}
+                                    </code>
+                                    <div style="font-size: 0.875rem; color: var(--gray-600); margin-top: 0.5rem;">
+                                        Use this if you can't scan the QR code
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="width: 200px; height: 200px; background: white; border: 1px solid var(--gray-200); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                                    {% if qr_code_url %}
+                                        <img src="{{ qr_code_url }}" alt="2FA QR Code" style="max-width: 180px; max-height: 180px;" />
+                                    {% else %}
+                                        <div style="text-align: center; color: var(--gray-400);">
+                                            <i class="fas fa-qrcode" style="font-size: 3rem; margin-bottom: 0.5rem; display: block;"></i>
+                                            <div style="font-size: 0.875rem;">QR Code</div>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Verify -->
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="width: 40px; height: 40px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700;">
+                                3
+                            </div>
+                            <h4 style="margin: 0; color: var(--gray-800);">Verify Setup</h4>
+                        </div>
+                        <p style="color: var(--gray-600); margin-bottom: 1.5rem;">
+                            Enter the 6-digit code from your authenticator app to complete the setup:
+                        </p>
+                        
+                        <form method="post" id="verify2faForm">
+                            {% csrf_token %}
+                            
+                            {% if form.non_field_errors %}
+                                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.5rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--error-color);">
+                                        <i class="fas fa-exclamation-circle"></i>
+                                        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                            
+                            <div style="display: flex; gap: 1rem; align-items: end;">
+                                <div style="flex: 1;">
+                                    <label style="display: block; font-weight: 500; color: var(--gray-700); margin-bottom: 0.5rem;">
+                                        Verification Code
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        name="verification_code"
+                                        placeholder="000000"
+                                        maxlength="6"
+                                        pattern="[0-9]{6}"
+                                        style="width: 100%; padding: 0.75rem 1rem; border: 2px solid var(--gray-200); border-radius: var(--radius); font-size: 1.125rem; text-align: center; letter-spacing: 0.25rem; font-family: 'Courier New', monospace;"
+                                        required
+                                        autocomplete="one-time-code"
+                                        id="verificationCode"
+                                    />
+                                </div>
+                                <button type="submit" class="btn btn-primary" style="min-width: 120px;">
+                                    <i class="fas fa-check"></i>
+                                    Verify
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Back to Dashboard -->
+        <div class="text-center mt-4">
+            <a href="{% url 'accounts:dashboard' %}" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left"></i>
+                Back to Dashboard
+            </a>
+        </div>
     </div>
 </div>
 
+{% block extra_js %}
 <script>
-document.getElementById('token').addEventListener('input', function(e) {
-    // Автоматично видаляємо не-цифрові символи
-    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+document.addEventListener('DOMContentLoaded', function() {
+    const verificationInput = document.getElementById('verificationCode');
+    
+    if (verificationInput) {
+        // Auto-focus on verification code input
+        verificationInput.focus();
+        
+        // Only allow numbers
+        verificationInput.addEventListener('input', function(e) {
+            e.target.value = e.target.value.replace(/[^0-9]/g, '');
+            
+            // Auto-submit when 6 digits are entered
+            if (e.target.value.length === 6) {
+                setTimeout(() => {
+                    document.getElementById('verify2faForm').submit();
+                }, 500);
+            }
+        });
+        
+        // Handle paste
+        verificationInput.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const paste = (e.clipboardData || window.clipboardData).getData('text');
+            const numbers = paste.replace(/[^0-9]/g, '').slice(0, 6);
+            e.target.value = numbers;
+            
+            if (numbers.length === 6) {
+                setTimeout(() => {
+                    document.getElementById('verify2faForm').submit();
+                }, 500);
+            }
+        });
+    }
 });
 </script>
+{% endblock %}
 {% endblock %}

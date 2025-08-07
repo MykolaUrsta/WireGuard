@@ -1,0 +1,64 @@
+{% load locations_tags %}
+
+<footer class="footer">
+    <div class="footer-container">
+        {% if user.is_authenticated %}
+        <!-- System Status -->
+        <div class="footer-section">
+            <h4 class="footer-title">System Status</h4>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-label">Locations:</span>
+                    <span class="status-value">{% get_total_locations %}</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Networks:</span>
+                    <span class="status-value">{% get_total_networks %}</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Devices:</span>
+                    <span class="status-value">{% get_total_devices %}</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Online:</span>
+                    <span class="status-value text-success">{% get_online_devices %}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="footer-section">
+            <h4 class="footer-title">Quick Links</h4>
+            <div class="footer-links">
+                <a href="{% url 'accounts:dashboard' %}" class="footer-link">Dashboard</a>
+                <a href="{% url 'locations:list' %}" class="footer-link">Manage Locations</a>
+                <a href="{% url 'wireguard:networks' %}" class="footer-link">Networks</a>
+                <a href="/admin/" class="footer-link" target="_blank">Admin Panel</a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- System Info -->
+        <div class="footer-section">
+            <h4 class="footer-title">About</h4>
+            <p class="footer-text">
+                WireGuard Panel - Secure VPN Management System
+            </p>
+            <div class="footer-version">
+                <small>Version 1.0.0</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer Bottom -->
+    <div class="footer-bottom">
+        <div class="footer-container">
+            <div class="footer-copyright">
+                <p>&copy; 2025 WireGuard Panel. All rights reserved.</p>
+            </div>
+            <div class="footer-powered">
+                <p>Powered by <i class="fas fa-heart text-danger"></i> Django & WireGuard</p>
+            </div>
+        </div>
+    </div>
+</footer>

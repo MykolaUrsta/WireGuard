@@ -1,0 +1,141 @@
+{% extends 'layouts/index.html' %}
+{% load static %}
+
+{% block title %}VPN Overview{% endblock %}
+{% block page_title %}Огляд мережі{% endblock %}
+
+{% block content %}
+<div class="vpn-overview">
+    <!-- Main Stats Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="stats-card">
+                <div class="stats-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-number">{{ active_connections }}</div>
+                    <div class="stats-label">Active connections</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="stats-card">
+                <div class="stats-icon">
+                    <i class="fas fa-exchange-alt"></i>
+                </div>
+                <div class="stats-content">
+                    <div class="stats-number">{{ traffic_in_mb|floatformat:0 }} MB</div>
+                    <div class="stats-label">Network usage</div>
+                    <div class="stats-sublabel">
+                        In: {{ traffic_in_mb|floatformat:1 }} MB | Out: {{ traffic_out_mb|floatformat:1 }} MB
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connected Users -->
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Connected users</h5>
+                    <div class="view-toggle">
+                        <button class="btn btn-sm btn-outline-primary active" data-view="grid">
+                            <i class="fas fa-th-large"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" data-view="list">
+                            <i class="fas fa-list"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="connected-users-grid" id="usersGrid">
+                        {% for peer in connected_users %}
+                        <div class="user-card">
+                            <div class="user-avatar">
+                                {{ peer.user.first_name|first|default:peer.user.username|first|upper }}{{ peer.user.last_name|first|upper|default:"" }}
+                            </div>
+                            <div class="user-info">
+                                <div class="user-name">{{ peer.user.get_full_name|default:peer.user.username }}</div>
+                                <div class="user-details">
+                                    <div class="connection-time">
+                                        <i class="fas fa-clock"></i>
+                                        {% if peer.connected_at %}
+                                            {{ peer.connected_at|timesince }}
+                                        {% else %}
+                                            Active
+                                        {% endif %}
+                                    </div>
+                                    <div class="device-info">
+                                        <i class="fas fa-{{ peer.device_type|default:'desktop' }}"></i>
+                                        {{ peer.name|default:"Desktop" }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="user-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">Devices:</span>
+                                    <span class="stat-value">
+                                        <i class="fas fa-desktop"></i>
+                                        <i class="fas fa-mobile-alt"></i>
+                                    </span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Connections:</span>
+                                    <span class="stat-value">{{ peer.connection_count|default:1 }}</span>
+                                </div>
+                                <div class="traffic-mini">
+                                    <span class="traffic-item">
+                                        <i class="fas fa-arrow-up text-primary"></i>
+                                        {{ peer.bytes_sent|filesizeformat|default:"0 B" }}
+                                    </span>
+                                    <span class="traffic-item">
+                                        <i class="fas fa-arrow-down text-success"></i>
+                                        {{ peer.bytes_received|filesizeformat|default:"0 B" }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="no-users">
+                            <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No users currently connected</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// View toggle functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const viewButtons = document.querySelectorAll('[data-view]');
+    const usersGrid = document.getElementById('usersGrid');
+    
+    viewButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            // Remove active class from all buttons
+            viewButtons.forEach(btn => btn.classList.remove('active'));
+            // Add active class to clicked button
+            this.classList.add('active');
+            
+            // Toggle view
+            const viewType = this.dataset.view;
+            if (viewType === 'list') {
+                usersGrid.style.display = 'block';
+                usersGrid.style.gridTemplateColumns = '1fr';
+            } else {
+                usersGrid.style.display = 'grid';
+                usersGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(300px, 1fr))';
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

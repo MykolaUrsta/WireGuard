@@ -1,0 +1,35 @@
+<div class="popup-overlay" id="errorPopup" style="display: none;">
+    <div class="popup-content error-popup">
+        <div class="popup-header">
+            <h3 class="popup-title">
+                <i class="fas fa-exclamation-triangle"></i>
+                Error
+            </h3>
+            <button class="popup-close" onclick="closeErrorPopup()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="popup-body">
+            <p id="errorMessage"></p>
+        </div>
+        <div class="popup-footer">
+            <button class="btn btn-secondary" onclick="closeErrorPopup()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function showErrorPopup(message) {
+    document.getElementById('errorMessage').textContent = message;
+    document.getElementById('errorPopup').style.display = 'flex';
+}
+
+function closeErrorPopup() {
+    document.getElementById('errorPopup').style.display = 'none';
+}
+
+// Auto close after 5 seconds
+setTimeout(function() {
+    closeErrorPopup();
+}, 5000);
+</script>

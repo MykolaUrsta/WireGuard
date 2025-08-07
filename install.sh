@@ -28,6 +28,10 @@ while [[ $# -gt 0 ]]; do
             EMAIL="$2"
             shift 2
             ;;
+        --no-sudo)
+            NO_SUDO=true
+            shift
+            ;;
         -h|--help)
             echo "Використання: $0 [ОПЦІЇ]"
             echo ""
@@ -39,12 +43,13 @@ while [[ $# -gt 0 ]]; do
             echo "ОПЦІЇ:"
             echo "  --domain     Домен для SSL сертифікату (за замовчуванням: wg-portal.itc.gov.ua)"
             echo "  --email      Email для Let's Encrypt (за замовчуванням: admin@itc.gov.ua)"
+            echo "  --no-sudo    Запуск без sudo (для розробки/тестування)"
             echo "  -h, --help   Показати цю довідку"
             echo ""
             echo "ПРИКЛАДИ:"
             echo "  sudo $0                    # Повна установка"
-            echo "  $0 --deploy               # Швидке розгортання"
-            echo "  $0 --update               # Тільки оновлення"
+            echo "  $0 --deploy --no-sudo      # Розгортання без sudo"
+            echo "  $0 --update --no-sudo      # Тільки оновлення без sudo"
             exit 0
             ;;
         *)
@@ -96,8 +101,9 @@ echo ""
 
 # Функція перевірки ROOT прав (тільки для повної установки)
 check_root() {
-    if [ "$MODE" = "full" ] && [ "$EUID" -ne 0 ]; then
-        echo "❌ Повна установка потребує ROOT права. Запустіть з sudo"
+    if [ "$MODE" = "full" ] && [ "$EUID" -ne 0 ] && [ "$NO_SUDO" != "true" ]; then
+        echo "❌ Повна установка потребує ROOT права. Запустіть з sudo або використайте --no-sudo для розробки"
+        echo "   Для розробки: $0 --deploy --no-sudo"
         exit 1
     fi
 }
@@ -145,19 +151,31 @@ install_docker() {
 # Функція перевірки Docker
 check_docker() {
     if ! command -v docker &> /dev/null; then
-        if [ "$MODE" = "full" ]; then
+        if [ "$MODE" = "full" ] && [ "$NO_SUDO" != "true" ]; then
             echo "⚠️  Docker не знайдено. Встановлюємо..."
             install_docker
         else
-            echo "❌ Docker не встановлений. Використайте: sudo $0 (без опцій) для повної установки"
+            echo "❌ Docker не встановлений."
+            echo "   Встановіть Docker: sudo apt install docker.io docker-compose-plugin"
+            echo "   Додайте користувача в групу: sudo usermod -aG docker $USER"
+            echo "   Перезайдіть в систему після цього"
             exit 1
         fi
     else
         echo "✓ Docker вже встановлений"
     fi
     
+    # Перевірка прав доступу до Docker
+    if ! docker ps &> /dev/null; then
+        echo "❌ Немає доступу до Docker. Перевірте що користувач в групі docker:"
+        echo "   sudo usermod -aG docker $USER"
+        echo "   Потім перезайдіть в систему"
+        exit 1
+    fi
+    
     if ! docker compose version &> /dev/null; then
         echo "❌ Docker Compose не знайдено"
+        echo "   Встановіть: sudo apt install docker-compose-plugin"
         exit 1
     else
         echo "✓ Docker Compose доступний"
@@ -173,9 +191,14 @@ create_directories() {
     mkdir -p ssl/certbot/www
     mkdir -p ssl/nginx
     
-    # Встановлення прав
-    chmod 755 logs
-    chmod 755 ssl
+    # Встановлення прав (тільки якщо є права)
+    if [ "$NO_SUDO" != "true" ] && [ "$EUID" -eq 0 ]; then
+        chmod 755 logs
+        chmod 755 ssl
+        chmod 755 ssl/certbot
+        chmod 755 ssl/certbot/conf
+        chmod 755 ssl/certbot/www
+    fi
     
     echo "✓ Директорії створено"
 }
@@ -224,6 +247,11 @@ build_and_start() {
 
 # Функція отримання SSL сертифікату
 setup_ssl() {
+    if [ "$NO_SUDO" = "true" ]; then
+        echo "🔐 Пропускаємо SSL в режимі --no-sudo (для розробки)"
+        return 0
+    fi
+    
     echo "🔐 Налаштування SSL сертифікату..."
     
     # Перевірка доступності домену
@@ -284,9 +312,15 @@ show_status() {
     echo "Перегляд логів:     docker compose logs -f"
     echo "Перезапуск:         docker compose restart"
     echo "Зупинка:            docker compose down"
-    echo "Швидке оновлення:   ./install.sh --update"
-    echo "Швидке розгортання: ./install.sh --deploy"
-    echo "Повна установка:    sudo ./install.sh"
+    if [ "$NO_SUDO" = "true" ]; then
+        echo "Швидке оновлення:   ./install.sh --update --no-sudo"
+        echo "Швидке розгортання: ./install.sh --deploy --no-sudo"
+        echo "Повна установка:    ./install.sh --no-sudo"
+    else
+        echo "Швидке оновлення:   ./install.sh --update"
+        echo "Швидке розгортання: ./install.sh --deploy"
+        echo "Повна установка:    sudo ./install.sh"
+    fi
     echo ""
 }
 
