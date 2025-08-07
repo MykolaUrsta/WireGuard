@@ -1,0 +1,189 @@
+{% extends 'layouts/index.html' %}
+{% load static %}
+
+{% block title %}Видалити користувача{% endblock %}
+
+{% block extra_css %}
+<style>
+    .delete-page {
+        padding: 24px;
+        background: #f8f9fa;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .delete-container {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e0e0e0;
+        padding: 40px;
+        max-width: 500px;
+        width: 100%;
+        text-align: center;
+    }
+    
+    .warning-icon {
+        width: 64px;
+        height: 64px;
+        background: #ffeaa7;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 24px;
+        color: #e17055;
+    }
+    
+    .delete-title {
+        font-size: 24px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 16px;
+    }
+    
+    .delete-message {
+        color: #666;
+        margin-bottom: 8px;
+        line-height: 1.5;
+    }
+    
+    .user-info {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 24px 0;
+        text-align: left;
+    }
+    
+    .user-detail {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    
+    .user-detail:last-child {
+        margin-bottom: 0;
+    }
+    
+    .label {
+        font-weight: 500;
+        color: #333;
+    }
+    
+    .value {
+        color: #666;
+    }
+    
+    .warning-text {
+        color: #e17055;
+        font-weight: 500;
+        margin-top: 16px;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        margin-top: 32px;
+    }
+    
+    .btn-danger {
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 12px 32px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    
+    .btn-danger:hover {
+        background: #c82333;
+    }
+    
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 12px 32px;
+        font-weight: 500;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        transition: background 0.2s;
+    }
+    
+    .btn-secondary:hover {
+        background: #5a6268;
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="delete-page">
+    <div class="delete-container">
+        <div class="warning-icon">
+            <svg width="32" height="32" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+            </svg>
+        </div>
+        
+        <h1 class="delete-title">Видалити користувача?</h1>
+        
+        <p class="delete-message">
+            Ви дійсно хочете видалити цього користувача? Ця дія незворотна.
+        </p>
+        
+        <div class="user-info">
+            <div class="user-detail">
+                <span class="label">Логін:</span>
+                <span class="value">{{ user_obj.username }}</span>
+            </div>
+            <div class="user-detail">
+                <span class="label">Email:</span>
+                <span class="value">{{ user_obj.email }}</span>
+            </div>
+            {% if user_obj.first_name or user_obj.last_name %}
+            <div class="user-detail">
+                <span class="label">Ім'я:</span>
+                <span class="value">{{ user_obj.first_name }} {{ user_obj.last_name }}</span>
+            </div>
+            {% endif %}
+            {% if user_obj.department %}
+            <div class="user-detail">
+                <span class="label">Департамент:</span>
+                <span class="value">{{ user_obj.department }}</span>
+            </div>
+            {% endif %}
+            {% if user_obj.position %}
+            <div class="user-detail">
+                <span class="label">Посада:</span>
+                <span class="value">{{ user_obj.position }}</span>
+            </div>
+            {% endif %}
+            <div class="user-detail">
+                <span class="label">Статус:</span>
+                <span class="value">
+                    {% if user_obj.is_active %}Активний{% else %}Неактивний{% endif %}
+                    {% if user_obj.is_superuser %}, Суперадміністратор{% elif user_obj.is_staff %}, Персонал{% endif %}
+                </span>
+            </div>
+        </div>
+        
+        <p class="warning-text">
+            Всі дані користувача, включаючи VPN конфігурації та логи, будуть видалені назавжди.
+        </p>
+        
+        <form method="post" class="form-actions">
+            {% csrf_token %}
+            <a href="{% url 'accounts:users_list' %}" class="btn-secondary">Скасувати</a>
+            <button type="submit" class="btn-danger">Видалити користувача</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

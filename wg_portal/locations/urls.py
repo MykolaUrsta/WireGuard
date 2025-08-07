@@ -27,6 +27,7 @@ urlpatterns = [
     path('devices/create/', views.device_create, name='device_create'),
     path('devices/<int:pk>/', views.device_detail, name='device_detail'),
     path('devices/<int:pk>/config/', views.device_config, name='device_config'),
+    path('devices/<int:device_id>/download/', views.device_config_download, name='device_config_download'),
     
     # ACL
     path('acl/', views.acl_list, name='acl_list'),

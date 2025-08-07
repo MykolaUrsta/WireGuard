@@ -1,0 +1,185 @@
+{% extends 'layouts/index.html' %}
+{% load static %}
+
+{% block title %}Add device{% endblock %}
+
+{% block content %}
+<div class="device-create-page">
+    <div class="device-create-container">
+        <div class="header">
+            <button class="back-btn" onclick="history.back()">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2z"/>
+                </svg>
+                Back
+            </button>
+            <h1 class="title">Add device</h1>
+            <button class="next-btn" id="nextBtn" disabled>
+                Next
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M4 13h12.17l-5.59 5.59L12 20l8-8-8-8-1.41 1.41L16.17 11H4v2z"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Step 1: Device Configuration -->
+        <div class="step-content" id="step1">
+            <div class="form-container">
+                <h2 class="form-title">Create VPN device</h2>
+                
+                <div class="info-box">
+                    <svg class="info-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,17A1.5,1.5 0 0,1 10.5,15.5A1.5,1.5 0 0,1 12,14A1.5,1.5 0 0,1 13.5,15.5A1.5,1.5 0 0,1 12,17M12,10.5A1.5,1.5 0 0,1 10.5,9A1.5,1.5 0 0,1 12,7.5A1.5,1.5 0 0,1 13.5,9A1.5,1.5 0 0,1 12,10.5Z"/>
+                    </svg>
+                    <span>You need to configure WireGuardVPN on your device, please visit <a href="#" class="documentation-link">documentation</a> if you don't know how to do it.</span>
+                </div>
+
+                <form id="deviceForm" method="post">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="device_name">Device Name:</label>
+                        <input type="text" id="device_name" name="name" class="form-input" placeholder="Enter device name" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="user_id">Assign to User:</label>
+                        <select id="user_id" name="user_id" class="form-input" required>
+                            <option value="">Select User</option>
+                            {% for user in users %}
+                                <option value="{{ user.id }}">{{ user.username }} ({{ user.email }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="key-generation">
+                        <div class="key-options">
+                            <label class="radio-option selected" data-option="generate">
+                                <input type="radio" name="key_option" value="generate" checked>
+                                <span class="radio-custom"></span>
+                                Generate key pair
+                            </label>
+                            <label class="radio-option" data-option="provide">
+                                <input type="radio" name="key_option" value="provide">
+                                <span class="radio-custom"></span>
+                                Use my own public key
+                            </label>
+                        </div>
+
+                        <div class="key-input" id="public_key_input" style="display: none;">
+                            <label for="public_key">Provide Your Public Key:</label>
+                            <textarea id="public_key" name="public_key" class="form-textarea" placeholder="Enter your public key"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Step 2: QR Code and Download -->
+        <div class="step-content" id="step2" style="display: none;">
+            <div class="config-container">
+                <h2 class="form-title">Device Configuration</h2>
+                
+                <div class="config-sections">
+                    <div class="qr-section">
+                        <h3>QR Code</h3>
+                        <div class="qr-code-container">
+                            <div id="qr-code"></div>
+                        </div>
+                        <p class="qr-description">Scan this QR code with your WireGuard app</p>
+                    </div>
+
+                    <div class="download-section">
+                        <h3>Configuration File</h3>
+                        <button class="download-btn" id="downloadBtn">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z"/>
+                            </svg>
+                            Download Configuration
+                        </button>
+                        <p class="download-description">Download the configuration file to import manually</p>
+                    </div>
+                </div>
+
+                <div class="device-info">
+                    <h3>Device Information</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Device Name:</span>
+                            <span class="info-value" id="device-name-display"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">IP Address:</span>
+                            <span class="info-value" id="device-ip-display"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Public Key:</span>
+                            <span class="info-value" id="device-key-display"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="back-step-btn" id="backStepBtn">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2z"/>
+                        </svg>
+                        Back
+                    </button>
+                    <button class="finish-btn" id="finishBtn">
+                        Finish
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Якщо є параметр user_id в URL, вибираємо його автоматично
+const urlParams = new URLSearchParams(window.location.search);
+const userId = urlParams.get('user_id');
+if (userId) {
+    const userSelect = document.getElementById('user_id');
+    if (userSelect) {
+        userSelect.value = userId;
+    }
+}
+</script>
+
+<script src="{% static 'js/device-create.js' %}"></script>
+{% endblock %}
+{% endblock %}
+                        {% if users %}
+                            {% for user in users %}
+                                <option value="{{ user.id }}">{{ user.username }} ({{ user.email }})</option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                
+                <div style="display: flex; gap: 12px; margin-top: 32px;">
+                    <button type="submit" class="add-device-btn">
+                        <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        Create Device
+                    </button>
+                    <a href="{% url 'accounts:users_list' %}" class="edit-btn" style="background: #6c757d;">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Якщо є параметр user_id в URL, вибираємо його автоматично
+const urlParams = new URLSearchParams(window.location.search);
+const userId = urlParams.get('user_id');
+if (userId) {
+    const userSelect = document.getElementById('user_id');
+    userSelect.value = userId;
+}
+</script>
+{% endblock %}

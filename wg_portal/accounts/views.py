@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -8,7 +8,6 @@ from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 from django.views import View
 from django_otp.decorators import otp_required
-from django_otp.models import Device
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from django_otp.util import random_hex
 import qrcode
@@ -16,7 +15,7 @@ from io import BytesIO
 import base64
 import json
 from .models import CustomUser
-from .forms import UserRegistrationForm, UserLoginForm, Enable2FAForm
+from .forms import UserRegistrationForm, UserLoginForm, Enable2FAForm, UserAdminForm, UserFilterForm
 from audit_logging.models import UserActionLog
 import logging
 
@@ -375,3 +374,286 @@ class RegistrationView(View):
             return redirect('login')
         
         return render(request, 'accounts/register.html', {'form': form})
+
+
+@login_required
+def users_list(request):
+    """Список всіх користувачів системи з фільтрацією"""
+    from django.contrib.auth import get_user_model
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+    
+    User = get_user_model()
+    
+    # Форма фільтрації
+    filter_form = UserFilterForm(request.GET)
+    users = User.objects.all()
+    
+    # Застосування фільтрів
+    if filter_form.is_valid():
+        filter_type = filter_form.cleaned_data.get('filter_type', 'all')
+        search_query = filter_form.cleaned_data.get('search', '')
+        
+        # Фільтрація за типом
+        if filter_type == 'active':
+            users = users.filter(is_active=True)
+        elif filter_type == 'inactive':
+            users = users.filter(is_active=False)
+        elif filter_type == 'admin':
+            users = users.filter(is_superuser=True)
+        elif filter_type == 'staff':
+            users = users.filter(is_staff=True)
+        elif filter_type == 'wireguard_enabled':
+            users = users.filter(is_wireguard_enabled=True)
+        elif filter_type == 'wireguard_disabled':
+            users = users.filter(is_wireguard_enabled=False)
+        
+        # Пошук
+        if search_query:
+            users = users.filter(
+                Q(username__icontains=search_query) |
+                Q(email__icontains=search_query) |
+                Q(first_name__icontains=search_query) |
+                Q(last_name__icontains=search_query) |
+                Q(phone__icontains=search_query)
+            )
+    
+    # Сортування
+    sort_by = request.GET.get('sort', 'username')
+    users = users.order_by(sort_by)
+    
+    # Пагінація
+    paginator = Paginator(users, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Статистика для фільтрів
+    filter_stats = {
+        'all': User.objects.count(),
+        'active': User.objects.filter(is_active=True).count(),
+        'inactive': User.objects.filter(is_active=False).count(),
+        'admin': User.objects.filter(is_superuser=True).count(),
+        'staff': User.objects.filter(is_staff=True).count(),
+        'wireguard_enabled': User.objects.filter(is_wireguard_enabled=True).count(),
+        'wireguard_disabled': User.objects.filter(is_wireguard_enabled=False).count(),
+    }
+    
+    context = {
+        'users': page_obj,
+        'filter_form': filter_form,
+        'filter_stats': filter_stats,
+        'total_users': users.count(),
+        'sort_by': sort_by,
+    }
+    
+    return render(request, 'accounts/users_list.html', context)
+
+
+@login_required
+def user_add(request):
+    """Додавання нового користувача"""
+    if not request.user.is_staff:
+        messages.error(request, 'У вас немає прав для додавання користувачів')
+        return redirect('accounts:users_list')
+    
+    if request.method == 'POST':
+        form = UserAdminForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            messages.success(request, f'Користувач {user.username} успішно створений')
+            logger.info(f"Адміністратор {request.user.username} створив користувача {user.username}")
+            UserActionLog.objects.create(
+                user=request.user,
+                action='user_created',
+                description=f'Створено користувача {user.username}',
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')
+            )
+            return redirect('accounts:users_list')
+    else:
+        form = UserAdminForm()
+    
+    return render(request, 'accounts/user_form.html', {
+        'form': form,
+        'title': 'Додати користувача',
+        'submit_text': 'Створити користувача'
+    })
+
+
+@login_required
+def user_edit(request, pk):
+    """Редагування користувача"""
+    if not request.user.is_staff:
+        messages.error(request, 'У вас немає прав для редагування користувачів')
+        return redirect('accounts:users_list')
+    
+    from django.shortcuts import get_object_or_404
+    from django.contrib.auth import get_user_model
+    
+    User = get_user_model()
+    user = get_object_or_404(User, pk=pk)
+    
+    if request.method == 'POST':
+        form = UserAdminForm(request.POST, instance=user)
+        if form.is_valid():
+            user = form.save()
+            messages.success(request, f'Користувач {user.username} успішно оновлений')
+            logger.info(f"Адміністратор {request.user.username} оновив користувача {user.username}")
+            UserActionLog.objects.create(
+                user=request.user,
+                action='user_updated',
+                description=f'Оновлено користувача {user.username}',
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')
+            )
+            return redirect('accounts:users_list')
+    else:
+        form = UserAdminForm(instance=user)
+    
+    return render(request, 'accounts/user_form.html', {
+        'form': form,
+        'user_obj': user,
+        'title': f'Редагувати {user.username}',
+        'submit_text': 'Зберегти зміни'
+    })
+
+
+@login_required
+def user_delete(request, pk):
+    """Видалення користувача"""
+    if not request.user.is_superuser:
+        messages.error(request, 'У вас немає прав для видалення користувачів')
+        return redirect('accounts:users_list')
+    
+    from django.shortcuts import get_object_or_404
+    from django.contrib.auth import get_user_model
+    
+    User = get_user_model()
+    user = get_object_or_404(User, pk=pk)
+    
+    if user == request.user:
+        messages.error(request, 'Ви не можете видалити себе')
+        return redirect('accounts:users_list')
+    
+    if request.method == 'POST':
+        username = user.username
+        user.delete()
+        messages.success(request, f'Користувач {username} успішно видалений')
+        logger.info(f"Адміністратор {request.user.username} видалив користувача {username}")
+        UserActionLog.objects.create(
+            user=request.user,
+            action='user_deleted',
+            description=f'Видалено користувача {username}',
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')
+        )
+        return redirect('accounts:users_list')
+    
+    return render(request, 'accounts/user_confirm_delete.html', {
+        'user_obj': user
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def user_toggle_active(request, pk):
+    """Активація/деактивація користувача"""
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'error': 'Немає прав'})
+    
+    from django.shortcuts import get_object_or_404
+    from django.contrib.auth import get_user_model
+    
+    User = get_user_model()
+    user = get_object_or_404(User, pk=pk)
+    
+    if user == request.user:
+        return JsonResponse({'success': False, 'error': 'Ви не можете деактивувати себе'})
+    
+    user.is_active = not user.is_active
+    user.save()
+    
+    action = 'user_activated' if user.is_active else 'user_deactivated'
+    status = 'активовано' if user.is_active else 'деактивовано'
+    
+    logger.info(f"Адміністратор {request.user.username} {status} користувача {user.username}")
+    UserActionLog.objects.create(
+        user=request.user,
+        action=action,
+        description=f'{status.capitalize()} користувача {user.username}',
+        ip_address=request.META.get('REMOTE_ADDR'),
+        user_agent=request.META.get('HTTP_USER_AGENT', '')
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'is_active': user.is_active,
+        'message': f'Користувач {user.username} {status}'
+    })
+
+
+@login_required
+def user_detail(request, pk):
+    """Детальний перегляд профілю користувача"""
+    from django.contrib.auth import get_user_model
+    from locations.models import Device
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    User = get_user_model()
+    user = get_object_or_404(User, pk=pk)
+    
+    # Отримуємо пристрої користувача
+    devices = Device.objects.filter(user=user).select_related('location', 'network', 'group')
+    
+    # Підраховуємо статистику по пристроях
+    total_devices = devices.count()
+    active_devices = devices.filter(status='active').count()
+    connected_devices = devices.filter(
+        last_handshake__gte=timezone.now() - timedelta(minutes=10)
+    ).count()
+    
+    # Загальна статистика трафіку
+    total_upload = sum(device.bytes_sent or 0 for device in devices)
+    total_download = sum(device.bytes_received or 0 for device in devices)
+    
+    # Перевіряємо 2FA статус
+    from django_otp.plugins.otp_totp.models import TOTPDevice
+    totp_devices = TOTPDevice.objects.filter(user=user, confirmed=True)
+    has_2fa = totp_devices.exists()
+    
+    # Форматуємо дані для кожного пристрою
+    device_data = []
+    for device in devices:
+        # Визначаємо статус підключення
+        is_connected = False
+        connection_status = "Never connected"
+        if device.last_handshake:
+            time_diff = timezone.now() - device.last_handshake
+            if time_diff < timedelta(minutes=10):
+                is_connected = True
+                connection_status = "Connected"
+            else:
+                connection_status = f"Last seen {time_diff.days} days ago" if time_diff.days > 0 else "Recently disconnected"
+        
+        device_data.append({
+            'device': device,
+            'is_connected': is_connected,
+            'connection_status': connection_status,
+            'public_ip': device.location.server_ip if device.location else None,
+            'config_generated': bool(device.public_key and device.private_key),
+        })
+    
+    context = {
+        'profile_user': user,  # Renamed to avoid conflict with request.user
+        'devices': device_data,
+        'total_devices': total_devices,
+        'active_devices': active_devices,
+        'connected_devices': connected_devices,
+        'total_upload': total_upload,
+        'total_download': total_download,
+        'has_2fa': has_2fa,
+        'can_edit': request.user.is_staff or request.user == user,
+    }
+    
+    return render(request, 'accounts/user_detail.html', context)

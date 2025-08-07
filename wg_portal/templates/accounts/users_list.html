@@ -1,0 +1,452 @@
+{% extends 'layouts/index.html' %}
+{% load static %}
+{% load accounts_extras %}
+
+{% block title %}Користувачі{% endblock %}
+
+{% block extra_css %}
+<style>
+    .users-page {
+        padding: 24px;
+        background: #f8f9fa;
+        min-height: 100vh;
+    }
+    
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 32px;
+    }
+    
+    .page-title {
+        font-size: 32px;
+        font-weight: 600;
+        color: #1a1a1a;
+        margin: 0;
+    }
+    
+    .add-user-btn {
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    
+    .add-user-btn:hover {
+        background: #0056b3;
+    }
+    
+    .controls-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        gap: 16px;
+    }
+    
+    .users-filter {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+        min-width: 200px;
+    }
+    
+    .filter-label {
+        font-size: 14px;
+        color: #666;
+        white-space: nowrap;
+    }
+    
+    .filter-select {
+        border: none;
+        outline: none;
+        background: transparent;
+        font-size: 14px;
+        color: #333;
+    }
+    
+    .search-box {
+        position: relative;
+        max-width: 400px;
+        width: 100%;
+    }
+    
+    .search-input {
+        width: 100%;
+        padding: 12px 16px 12px 44px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 14px;
+        background: white;
+    }
+    
+    .search-icon {
+        position: absolute;
+        left: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #666;
+    }
+    
+    .users-table-container {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e0e0e0;
+        overflow: hidden;
+    }
+    
+    .users-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .users-table th {
+        background: #f8f9fa;
+        padding: 16px;
+        text-align: left;
+        font-weight: 500;
+        color: #666;
+        font-size: 14px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .users-table td {
+        padding: 16px;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 14px;
+    }
+    
+    .users-table tr:hover {
+        background: #f8f9fa;
+    }
+    
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #007bff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 14px;
+    }
+    
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .user-name {
+        font-weight: 500;
+        color: #1a1a1a;
+    }
+    
+    .user-email {
+        color: #666;
+        font-size: 13px;
+    }
+    
+    .user-group {
+        background: #e3f2fd;
+        color: #1976d2;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    
+    .actions-btn {
+        background: transparent;
+        border: none;
+        color: #666;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 4px;
+    }
+    
+    .actions-btn:hover {
+        background: #f0f0f0;
+    }
+    
+    .pagination {
+        display: flex;
+        justify-content: center;
+        margin-top: 24px;
+        gap: 8px;
+    }
+    
+    .pagination .page-item {
+        padding: 8px 12px;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        color: #666;
+        cursor: pointer;
+        background: white;
+    }
+    
+    .pagination .page-item.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    
+    .pagination .page-item:hover:not(.active) {
+        background: #f8f9fa;
+    }
+    
+    .dropdown {
+        position: relative;
+        display: inline-block;
+    }
+    
+    .dropdown-menu {
+        display: none;
+        position: absolute;
+        right: 0;
+        top: 100%;
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        min-width: 150px;
+        z-index: 1000;
+        padding: 8px 0;
+    }
+    
+    .dropdown-menu.show {
+        display: block;
+    }
+    
+    .dropdown-item {
+        display: block;
+        padding: 8px 16px;
+        color: #333;
+        text-decoration: none;
+        font-size: 14px;
+    }
+    
+    .dropdown-item:hover {
+        background: #f8f9fa;
+        color: #333;
+    }
+    
+    .dropdown-divider {
+        margin: 4px 0;
+        border-top: 1px solid #e0e0e0;
+    }
+    
+    .text-danger {
+        color: #dc3545 !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<div class="users-page">
+    <div class="page-header">
+        <h1 class="page-title">Користувачі</h1>
+        <a href="{% url 'accounts:user_add' %}" class="add-user-btn">
+            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
+            </svg>
+            Додати нового
+        </a>
+    </div>
+    
+    <div class="controls-row">
+        <form method="get" class="users-filter">
+            <span class="filter-label">{{ filter_form.filter_type.value|default:"Всі користувачі" }}</span>
+            <span style="background: #007bff; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 12px;">
+                {% if filter_form.filter_type.value and filter_form.filter_type.value != 'all' %}
+                    {{ filter_stats|lookup:filter_form.filter_type.value|default:total_users }}
+                {% else %}
+                    {{ total_users }}
+                {% endif %}
+            </span>
+            {{ filter_form.filter_type }}
+        </form>
+        
+        <div class="search-box">
+            <form method="get">
+                {% if filter_form.filter_type.value and filter_form.filter_type.value != 'all' %}
+                    <input type="hidden" name="filter_type" value="{{ filter_form.filter_type.value }}">
+                {% endif %}
+                {{ filter_form.search }}
+                <svg class="search-icon" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+            </form>
+        </div>
+    </div>
+    
+    <div class="users-table-container">
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th>Ім'я користувача</th>
+                    <th>Логін</th>
+                    <th>Телефон</th>
+                    <th>Групи</th>
+                    <th>Дії</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>
+                        <div class="user-info">
+                            <div class="user-avatar">
+                                {{ user.first_name|first|default:user.username|first|upper }}{{ user.last_name|first|upper|default:"" }}
+                            </div>
+                            <div>
+                                <div class="user-name">
+                                    <a href="{% url 'accounts:user_detail' user.pk %}" style="color: inherit; text-decoration: none;">
+                                        {% if user.first_name or user.last_name %}
+                                            {{ user.first_name }} {{ user.last_name }}
+                                        {% else %}
+                                            {{ user.username }}
+                                        {% endif %}
+                                    </a>
+                                </div>
+                                {% if user.email %}
+                                <div class="user-email">{{ user.email }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.phone|default:"-" }}</td>
+                    <td>
+                        {% if user.is_superuser %}
+                            <span class="user-group">admin</span>
+                        {% elif user.is_staff %}
+                            <span class="user-group">staff</span>
+                        {% else %}
+                            <span class="user-group">user</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="dropdown">
+                            <button class="actions-btn" type="button" data-bs-toggle="dropdown">
+                                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z"/>
+                                </svg>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{% url 'accounts:user_edit' user.pk %}">Редагувати</a></li>
+                                {% if user != request.user %}
+                                    <li><a class="dropdown-item" href="#" onclick="toggleUserActive({{ user.pk }})">
+                                        {% if user.is_active %}Деактивувати{% else %}Активувати{% endif %}
+                                    </a></li>
+                                    {% if request.user.is_superuser %}
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item text-danger" href="{% url 'accounts:user_delete' user.pk %}">Видалити</a></li>
+                                    {% endif %}
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 40px; color: #666;">
+                        Користувачі не знайдені
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    {% if users.has_other_pages %}
+    <div class="pagination">
+        {% if users.has_previous %}
+            <a href="?page={{ users.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}" class="page-item">‹</a>
+        {% endif %}
+        
+        {% for num in users.paginator.page_range %}
+            {% if users.number == num %}
+                <span class="page-item active">{{ num }}</span>
+            {% else %}
+                <a href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}" class="page-item">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+        
+        {% if users.has_next %}
+            <a href="?page={{ users.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}" class="page-item">›</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Dropdown functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const dropdownButtons = document.querySelectorAll('[data-bs-toggle="dropdown"]');
+    
+    dropdownButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Close all other dropdowns
+            document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                if (menu !== this.nextElementSibling) {
+                    menu.classList.remove('show');
+                }
+            });
+            
+            // Toggle current dropdown
+            const menu = this.nextElementSibling;
+            menu.classList.toggle('show');
+        });
+    });
+    
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', function() {
+        document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+            menu.classList.remove('show');
+        });
+    });
+});
+
+// Toggle user active status
+function toggleUserActive(userId) {
+    fetch(`/accounts/users/${userId}/toggle/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Помилка при зміні статусу користувача');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Помилка при зміні статусу користувача');
+    });
+}
+</script>
+{% endblock %}

@@ -21,6 +21,8 @@ class UserActionLog(models.Model):
         ('user_created', 'Користувач створений'),
         ('user_deleted', 'Користувач видалений'),
         ('user_updated', 'Користувач оновлений'),
+        ('user_activated', 'Користувач активований'),
+        ('user_deactivated', 'Користувач деактивований'),
         ('wireguard_enabled', 'WireGuard увімкнений'),
         ('wireguard_disabled', 'WireGuard вимкнений'),
         ('config_downloaded', 'Конфігурація завантажена'),

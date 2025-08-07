@@ -16,7 +16,7 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a href="{% url 'accounts:dashboard' %}" class="nav-link">
+                <a href="{% url 'accounts:users_list' %}" class="nav-link {% if request.resolver_match.url_name == 'users_list' %}active{% endif %}">
                     <i class="fas fa-users"></i>
                     <span>Користувачі</span>
                 </a>

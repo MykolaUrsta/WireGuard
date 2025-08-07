@@ -1,0 +1,198 @@
+{% extends 'layouts/index.html' %}
+{% load static %}
+
+{% block title %}User Profile{% endblock %}
+
+{% block content %}
+<div class="user-profile-page">
+    <div class="page-header">
+        <h1 class="page-title">User Profile</h1>
+        {% if can_edit %}
+        <a href="{% url 'accounts:user_edit' profile_user.pk %}" class="edit-btn">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+            Edit
+        </a>
+        {% endif %}
+    </div>
+    
+    <div class="profile-grid">
+        <!-- Profile Details -->
+        <div class="profile-section">
+            <div class="section-header">
+                <h2 class="section-title">Profile Details</h2>
+            </div>
+            <div class="section-content">
+                <div class="profile-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Username:</span>
+                        <span class="detail-value">{{ profile_user.username }}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">First name:</span>
+                        <span class="detail-value">{{ profile_user.first_name|default:"DefGuard" }}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Last name:</span>
+                        <span class="detail-value">{{ profile_user.last_name|default:"Administrator" }}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Phone number:</span>
+                        <span class="detail-value">{{ profile_user.phone|default:"-" }}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">E-mail:</span>
+                        <span class="detail-value">{{ profile_user.email }}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">User groups:</span>
+                        <div>
+                            {% if profile_user.is_superuser %}
+                                <span class="user-group-badge">Admin</span>
+                            {% elif profile_user.is_staff %}
+                                <span class="user-group-badge">Staff</span>
+                            {% else %}
+                                <span class="user-group-badge">User</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Authorized apps:</span>
+                        <span class="detail-value" style="color: #999;">No authorized apps</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Password and Authentication -->
+        <div class="profile-section">
+            <div class="section-header">
+                <h2 class="section-title">Password and authentication</h2>
+            </div>
+            <div class="section-content">
+                <div class="detail-item">
+                    <span class="detail-label">Two-factor methods</span>
+                    <div class="two-factor-status">
+                        <span class="status-indicator {% if has_2fa %}status-enabled{% else %}status-disabled{% endif %}"></span>
+                        <span class="detail-value">
+                            {% if has_2fa %}Enabled{% else %}Disabled{% endif %}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="detail-item" style="margin-top: 16px;">
+                    <span class="detail-label">Time based one time passwords</span>
+                    <span class="detail-value">Security keys</span>
+                    <div style="margin-top: 8px; font-size: 12px; color: #999;">
+                        <span style="margin-right: 20px;">Disabled</span>
+                        <span>Disabled</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- User Devices -->
+    <div class="profile-section devices-section">
+        <div class="section-header">
+            <div class="devices-header">
+                <h2 class="section-title">User devices</h2>
+                <a href="{% url 'locations:device_create' %}" class="add-device-btn">
+                    <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                    </svg>
+                    Add new device
+                </a>
+            </div>
+        </div>
+        <div class="section-content">
+            {% if devices %}
+                {% for device_info in devices %}
+                <div class="device-item">
+                    <div class="device-header">
+                        <div class="device-name">
+                            <svg class="device-icon" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M17,19H7V5H17M17,1H7C5.89,1 5,1.89 5,3V21C5,22.11 5.89,23 7,23H17C18.11,23 19,22.11 19,21V3C19,1.89 18.11,1 17,1Z"/>
+                            </svg>
+                            <span class="device-title">{{ device_info.device.name }}</span>
+                        </div>
+                        <div class="device-actions">
+                            <button class="device-action-btn" title="Settings">
+                                <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.22,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.22,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/>
+                                </svg>
+                            </button>
+                            <button class="device-action-btn" title="Delete">
+                                <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="device-stats">
+                        <div class="stat-item">
+                            <div class="stat-label">Public IP:</div>
+                            <div class="stat-value">{{ device_info.public_ip|default:"Never connected" }}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Connected through:</div>
+                            <div class="stat-value">{{ device_info.connection_status }}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Connected date:</div>
+                            <div class="stat-value">
+                                {% if device_info.device.last_handshake %}
+                                    {{ device_info.device.last_handshake|date:"d.m.Y H:i" }}
+                                {% else %}
+                                    Never connected
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="device-traffic">
+                        <div class="traffic-info">
+                            <span class="stat-label">Traffic:</span>
+                            <span class="detail-value format-bytes">
+                                ↑ {{ device_info.device.bytes_sent|filesizeformat }} 
+                                ↓ {{ device_info.device.bytes_received|filesizeformat }}
+                            </span>
+                        </div>
+                        <span class="connection-status {% if device_info.is_connected %}status-connected{% elif device_info.device.last_handshake %}status-disconnected{% else %}status-never{% endif %}">
+                            {% if device_info.is_connected %}
+                                Connected
+                            {% elif device_info.device.last_handshake %}
+                                Disconnected
+                            {% else %}
+                                Never connected
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-devices">
+                    <svg class="no-devices-icon" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M17,19H7V5H17M17,1H7C5.89,1 5,1.89 5,3V21C5,22.11 5.89,23 7,23H17C18.11,23 19,22.11 19,21V3C19,1.89 18.11,1 17,1Z"/>
+                    </svg>
+                    <p>User has no devices yet</p>
+                    <a href="{% url 'locations:device_create' %}" class="add-device-btn">
+                        <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        Add first device
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

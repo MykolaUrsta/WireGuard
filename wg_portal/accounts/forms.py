@@ -120,6 +120,147 @@ class Enable2FAForm(forms.Form):
     )
 
 
+class UserAdminForm(forms.ModelForm):
+    """Форма для додавання/редагування користувача адміністратором"""
+    
+    password = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Залиште порожнім, щоб не змінювати'
+        }),
+        help_text='Залиште порожнім для редагування існуючого користувача'
+    )
+    
+    confirm_password = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Підтвердіть пароль'
+        })
+    )
+    
+    groups = forms.MultipleChoiceField(
+        required=False,
+        choices=[
+            ('admin', 'Адміністратор'),
+            ('staff', 'Персонал'),
+            ('user', 'Користувач'),
+        ],
+        widget=forms.CheckboxSelectMultiple(),
+        help_text='Виберіть групи користувача'
+    )
+    
+    class Meta:
+        model = CustomUser
+        fields = [
+            'username', 'email', 'first_name', 'last_name', 'phone',
+            'department', 'position', 'is_active', 'is_staff', 'is_superuser',
+            'is_wireguard_enabled', 'data_limit'
+        ]
+        widgets = {
+            'username': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Логін користувача'
+            }),
+            'email': forms.EmailInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Email адреса'
+            }),
+            'first_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ім\'я'
+            }),
+            'last_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Прізвище'
+            }),
+            'phone': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '+380...'
+            }),
+            'department': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Департамент'
+            }),
+            'position': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Посада'
+            }),
+            'data_limit': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ліміт у байтах (залиште порожнім для необмежено)'
+            }),
+            'is_active': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'is_staff': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'is_superuser': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'is_wireguard_enabled': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get('password')
+        confirm_password = cleaned_data.get('confirm_password')
+        
+        if password and password != confirm_password:
+            raise forms.ValidationError('Паролі не співпадають')
+        
+        return cleaned_data
+    
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        password = self.cleaned_data.get('password')
+        
+        if password:
+            user.set_password(password)
+        
+        if commit:
+            user.save()
+            
+        return user
+
+
+class UserFilterForm(forms.Form):
+    """Форма фільтрації користувачів"""
+    
+    FILTER_CHOICES = [
+        ('all', 'Всі користувачі'),
+        ('active', 'Активні'),
+        ('inactive', 'Неактивні'),
+        ('admin', 'Адміністратори'),
+        ('staff', 'Персонал'),
+        ('wireguard_enabled', 'З доступом до VPN'),
+        ('wireguard_disabled', 'Без доступу до VPN'),
+    ]
+    
+    filter_type = forms.ChoiceField(
+        choices=FILTER_CHOICES,
+        required=False,
+        initial='all',
+        widget=forms.Select(attrs={
+            'class': 'filter-select',
+            'onchange': 'this.form.submit()'
+        })
+    )
+    
+    search = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'search-input',
+            'placeholder': 'Знайти користувачів',
+            'type': 'search'
+        })
+    )
+
+
 class Verify2FAForm(forms.Form):
     """Форма перевірки 2FA коду"""
     
