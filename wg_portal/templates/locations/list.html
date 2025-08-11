@@ -1,0 +1,95 @@
+{% extends 'layouts/index.html' %}
+{% load static %}
+
+{% block title %}Локації{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold">Локації WireGuard</h2>
+        <a href="{% url 'locations:create' %}" class="btn btn-primary">
+            <i class="bi bi-plus"></i> Додати локацію
+        </a>
+    </div>
+
+    {% if locations %}
+        <div class="row">
+            {% for location in locations %}
+            <div class="col-xl-4 col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <h5 class="card-title mb-0">{{ location.name }}</h5>
+                            <span class="badge {% if location.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                                {% if location.is_active %}Активна{% else %}Неактивна{% endif %}
+                            </span>
+                        </div>
+                        
+                        {% if location.description %}
+                        <p class="card-text text-muted small">{{ location.description }}</p>
+                        {% endif %}
+                        
+                        <div class="mb-3">
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-globe text-primary me-2"></i>
+                                        <small class="text-muted">{{ location.server_ip }}:{{ location.server_port }}</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-network-widescreen text-info me-2"></i>
+                                        <small class="text-muted">{{ location.subnet }}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-4 text-center">
+                                <div class="fw-bold text-primary">{{ location.networks_count }}</div>
+                                <small class="text-muted">Мереж</small>
+                            </div>
+                            <div class="col-4 text-center">
+                                <div class="fw-bold text-success">{{ location.devices_count }}</div>
+                                <small class="text-muted">Пристроїв</small>
+                            </div>
+                            <div class="col-4 text-center">
+                                <div class="fw-bold text-warning">{{ location.active_users_count }}</div>
+                                <small class="text-muted">Активних</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-footer bg-transparent">
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'locations:detail' location.pk %}" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-eye"></i> Переглянути
+                            </a>
+                            <div>
+                                <a href="{% url 'locations:edit' location.pk %}" class="btn btn-outline-secondary btn-sm me-2">
+                                    <i class="bi bi-pencil"></i> Редагувати
+                                </a>
+                                <a href="{% url 'locations:device_create' %}?location={{ location.pk }}" class="btn btn-success btn-sm">
+                                    <i class="bi bi-plus"></i> Пристрій
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-geo-alt display-1 text-muted"></i>
+            <h3 class="mt-4">Локацій не знайдено</h3>
+            <p class="text-muted">Створіть першу локацію для початку роботи з WireGuard</p>
+            <a href="{% url 'locations:create' %}" class="btn btn-primary">
+                <i class="bi bi-plus"></i> Створити локацію
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

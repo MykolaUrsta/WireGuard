@@ -93,8 +93,10 @@ def location_create(request):
         interface_name = request.POST.get('interface_name', 'wg0')
         description = request.POST.get('description', '')
         dns_servers = request.POST.get('dns_servers', '1.1.1.1,8.8.8.8')
+        allowed_ips = request.POST.get('allowed_ips', '0.0.0.0/0')
         public_key = request.POST.get('public_key', '')
         private_key = request.POST.get('private_key', '')
+        is_active = request.POST.get('is_active') == 'on'
         
         try:
             # Генеруємо ключі якщо не вказані
@@ -120,10 +122,11 @@ def location_create(request):
                 public_key=public_key,
                 private_key=private_key,
                 dns_servers=dns_servers,
-                is_active=True
+                allowed_ips=allowed_ips,
+                is_active=is_active
             )
             
-            messages.success(request, f'Локація "{location.name}" успішно створена!')
+            messages.success(request, f'Локація "{location.name}" успішно створена та налаштована!')
             return redirect('locations:detail', pk=location.pk)
             
         except Exception as e:
@@ -148,13 +151,39 @@ def location_detail(request, pk):
     
     # Статистика
     total_devices = location.devices.count()
-    online_devices = location.devices.filter(status='active').count()
+    devices = location.devices.all()
+    online_devices = sum(1 for device in devices if device.is_online)
+    
+    # Статистика за останню годину
+    from django.utils import timezone
+    from datetime import timedelta
+    one_hour_ago = timezone.now() - timedelta(hours=1)
+    
+    # Пристрої, що були активні за останню годину
+    devices_last_hour = location.devices.filter(last_handshake__gte=one_hour_ago).count()
+    
+    # Унікальні користувачі, що були активні за останню годину
+    users_last_hour = location.devices.filter(
+        last_handshake__gte=one_hour_ago
+    ).values('user').distinct().count()
+    
+    # Загальна статистика трафіку
+    total_bytes_received = sum(device.bytes_received for device in devices)
+    total_bytes_sent = sum(device.bytes_sent for device in devices)
+    
+    # Всі локації для навігації
+    all_locations = Location.objects.all().order_by('name')
     
     context = {
         'location': location,
         'networks': networks,
         'total_devices': total_devices,
         'online_devices': online_devices,
+        'devices_last_hour': devices_last_hour,
+        'users_last_hour': users_last_hour,
+        'total_bytes_received': total_bytes_received,
+        'total_bytes_sent': total_bytes_sent,
+        'all_locations': all_locations,
     }
     
     return render(request, 'locations/detail.html', context)
@@ -167,16 +196,98 @@ def location_edit(request, pk):
     location = get_object_or_404(Location, pk=pk)
     
     if request.method == 'POST':
-        form = LocationForm(request.POST, instance=location)
-        if form.is_valid():
-            form.save()
+        # Перевіряємо чи це запит на регенерацію ключів
+        if request.POST.get('regenerate_keys'):
+            try:
+                import subprocess
+                # Генеруємо новий приватний ключ
+                private_key_result = subprocess.run(['wg', 'genkey'], capture_output=True, text=True)
+                if private_key_result.returncode == 0:
+                    private_key = private_key_result.stdout.strip()
+                    # Генеруємо новий публічний ключ
+                    public_key_result = subprocess.run(['wg', 'pubkey'], input=private_key, capture_output=True, text=True)
+                    if public_key_result.returncode == 0:
+                        public_key = public_key_result.stdout.strip()
+                        
+                        # Оновлюємо ключі в локації
+                        location.private_key = private_key
+                        location.public_key = public_key
+                        location.save()
+                        
+                        # Оновлюємо також в мережах цієї локації
+                        for network in location.networks.all():
+                            network.server_public_key = public_key
+                            network.save()
+                        
+                        # Оновлюємо WireGuard конфігурацію з новими ключами
+                        try:
+                            from .docker_manager import WireGuardDockerManager
+                            manager = WireGuardDockerManager()
+                            manager.generate_server_config(location)
+                            manager.restart_wireguard(location.interface_name)
+                        except Exception as wg_error:
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.error(f"Помилка оновлення WireGuard після регенерації ключів: {str(wg_error)}")
+                        
+                        return JsonResponse({
+                            'success': True,
+                            'public_key': public_key,
+                            'private_key': private_key,
+                            'message': 'Ключі регенеровано та WireGuard конфігурація оновлена!'
+                        })
+                return JsonResponse({'success': False, 'error': 'Помилка генерації ключів'})
+            except Exception as e:
+                return JsonResponse({'success': False, 'error': str(e)})
+        
+        # Звичайне оновлення локації
+        try:
+            location.name = request.POST.get('name')
+            location.description = request.POST.get('description', '')
+            location.server_ip = request.POST.get('server_ip')
+            location.server_port = int(request.POST.get('server_port'))
+            location.subnet = request.POST.get('subnet')
+            location.interface_name = request.POST.get('interface_name')
+            location.dns_servers = request.POST.get('dns_servers')
+            location.allowed_ips = request.POST.get('allowed_ips', '0.0.0.0/0')
+            location.is_active = bool(request.POST.get('is_active'))
+            location.save()
+            
+            # Оновлюємо також мережі цієї локації
+            for network in location.networks.all():
+                network.subnet = location.subnet
+                network.interface = location.interface_name
+                network.server_port = location.server_port
+                network.listen_port = location.server_port
+                network.dns_servers = location.dns_servers
+                network.allowed_ips = location.allowed_ips
+                network.save()
+            
+            # Явно оновлюємо WireGuard конфігурацію
+            try:
+                from .docker_manager import WireGuardDockerManager
+                manager = WireGuardDockerManager()
+                
+                # Регенеруємо конфігурацію сервера
+                if manager.generate_server_config(location):
+                    # Перезапускаємо WireGuard інтерфейс
+                    manager.restart_wireguard(location.interface_name)
+                    messages.info(request, 'WireGuard конфігурація оновлена та застосована!')
+                else:
+                    messages.warning(request, 'Локація оновлена, але конфігурація WireGuard не змогла оновитись')
+                    
+            except Exception as wg_error:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Помилка оновлення WireGuard для локації {location.name}: {str(wg_error)}")
+                messages.warning(request, f'Локація оновлена, але WireGuard конфігурація не оновилась: {str(wg_error)}')
+            
             messages.success(request, f'Локація "{location.name}" оновлена!')
             return redirect('locations:detail', pk=location.pk)
-    else:
-        form = LocationForm(instance=location)
+        except Exception as e:
+            messages.error(request, f'Помилка при оновленні: {str(e)}')
     
     context = {
-        'form': form,
         'location': location,
         'title': f'Редагувати {location.name}'
     }
@@ -325,55 +436,54 @@ def device_create(request):
     if request.method == 'POST':
         try:
             device_name = request.POST.get('name', '').strip()
-            user_id = request.POST.get('user_id')
-            key_option = request.POST.get('key_option', 'generate')
-            provided_public_key = request.POST.get('public_key', '').strip()
+            location_id = request.POST.get('location_id')
             
-            if not device_name or not user_id:
-                return JsonResponse({'success': False, 'error': 'Device name and user are required'})
+            if not device_name or not location_id:
+                return JsonResponse({'success': False, 'error': 'Назва пристрою та локація обов\'язкові'})
             
-            user = get_object_or_404(CustomUser, pk=user_id)
+            # Використовуємо поточного користувача
+            user = request.user
+            location = get_object_or_404(Location, pk=location_id)
             
-            # Генеруємо або використовуємо наданий публічний ключ
-            if key_option == 'generate':
-                # Генеруємо нову пару ключів
-                import subprocess
-                import tempfile
-                import os
+            # Завжди генеруємо нову пару ключів
+            import subprocess
+            import tempfile
+            import os
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                private_key_path = os.path.join(temp_dir, 'private.key')
+                public_key_path = os.path.join(temp_dir, 'public.key')
                 
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    private_key_path = os.path.join(temp_dir, 'private.key')
-                    public_key_path = os.path.join(temp_dir, 'public.key')
-                    
-                    # Генеруємо приватний ключ
-                    subprocess.run(['wg', 'genkey'], stdout=open(private_key_path, 'w'), check=True)
-                    
-                    # Генеруємо публічний ключ
-                    with open(private_key_path, 'r') as f:
-                        subprocess.run(['wg', 'pubkey'], stdin=f, stdout=open(public_key_path, 'w'), check=True)
-                    
-                    with open(private_key_path, 'r') as f:
-                        private_key = f.read().strip()
-                    with open(public_key_path, 'r') as f:
-                        public_key = f.read().strip()
-            else:
-                if not provided_public_key:
-                    return JsonResponse({'success': False, 'error': 'Public key is required'})
-                public_key = provided_public_key
-                private_key = None  # Користувач надав тільки публічний ключ
+                # Генеруємо приватний ключ
+                subprocess.run(['wg', 'genkey'], stdout=open(private_key_path, 'w'), check=True)
+                
+                # Генеруємо публічний ключ
+                with open(private_key_path, 'r') as f:
+                    subprocess.run(['wg', 'pubkey'], stdin=f, stdout=open(public_key_path, 'w'), check=True)
+                
+                with open(private_key_path, 'r') as f:
+                    private_key = f.read().strip()
+                with open(public_key_path, 'r') as f:
+                    public_key = f.read().strip()
             
-            # Отримуємо дефолтну локацію
-            location = Location.objects.filter(is_active=True).first()
-            if not location:
-                location = Location.objects.first()
-            
-            if not location:
-                return JsonResponse({'success': False, 'error': 'No location available'})
-            
-            # Отримуємо дефолтну мережу локації
+            # Отримуємо дефолтну мережу вибраної локації
             network = location.networks.first()
             if not network:
-                return JsonResponse({'success': False, 'error': 'No network available in location'})
+                # Якщо мережі немає, створюємо її автоматично з даних локації
+                from .models import Network
+                network = Network.objects.create(
+                    name=f"{location.name} - Auto Network",
+                    location=location,
+                    subnet=location.subnet,
+                    interface=location.interface_name,
+                    server_port=location.server_port,
+                    listen_port=location.server_port,
+                    server_public_key=location.public_key,
+                    server_ip=location.server_ip,
+                    allowed_ips="0.0.0.0/0",
+                    dns_servers=location.dns_servers,
+                    is_active=True
+                )
             
             # Генеруємо IP адресу для пристрою
             network_ip = ipaddress.IPv4Network(network.subnet)
@@ -387,7 +497,7 @@ def device_create(request):
                     break
             
             if not device_ip:
-                return JsonResponse({'success': False, 'error': 'No available IP addresses in network'})
+                return JsonResponse({'success': False, 'error': 'Немає доступних IP адрес у мережі'})
             
             # Створюємо пристрій
             device = Device.objects.create(
@@ -403,7 +513,7 @@ def device_create(request):
             
             # Генеруємо конфігурацію WireGuard
             config = f"""[Interface]
-PrivateKey = {private_key if private_key else 'YOUR_PRIVATE_KEY'}
+PrivateKey = {private_key}
 Address = {device_ip}/{network_ip.prefixlen}
 DNS = {network.dns_servers or '8.8.8.8, 8.8.4.4'}
 
@@ -440,11 +550,11 @@ PersistentKeepalive = 25
             return JsonResponse({'success': False, 'error': str(e)})
     
     # GET запит - показуємо форму
-    users = CustomUser.objects.filter(is_active=True).order_by('username')
+    locations = Location.objects.filter(is_active=True).order_by('name')
     
     context = {
-        'users': users,
-        'title': 'Add Device'
+        'locations': locations,
+        'title': 'Додати пристрій'
     }
     
     return render(request, 'locations/device_create.html', context)
@@ -464,7 +574,7 @@ def device_config_download(request, device_id):
     network_ip = ipaddress.IPv4Network(device.network.subnet)
     
     config = f"""[Interface]
-PrivateKey = {device.private_key if device.private_key else 'YOUR_PRIVATE_KEY'}
+PrivateKey = {device.private_key}
 Address = {device.ip_address}/{network_ip.prefixlen}
 DNS = {device.network.dns_servers or '8.8.8.8, 8.8.4.4'}
 
@@ -604,5 +714,145 @@ def api_toggle_device(request, pk):
     return JsonResponse({
         'status': device.status,
         'is_active': device.status == 'active',
-        'status_display': 'connected' if device.status == 'active' else 'disconnected'
+        'is_online': device.is_online,
+        'status_display': 'connected' if device.is_online else 'disconnected'
     })
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_location_stats(request, pk):
+    """API для отримання статистики локації"""
+    location = get_object_or_404(Location, pk=pk)
+    
+    # Статистика
+    devices = location.devices.all()
+    online_devices = sum(1 for device in devices if device.is_online)
+    
+    # Статистика за останню годину
+    from django.utils import timezone
+    from datetime import timedelta
+    one_hour_ago = timezone.now() - timedelta(hours=1)
+    
+    devices_last_hour = location.devices.filter(last_handshake__gte=one_hour_ago).count()
+    users_last_hour = location.devices.filter(
+        last_handshake__gte=one_hour_ago
+    ).values('user').distinct().count()
+    
+    # Інформація про кожен пристрій
+    devices_info = []
+    for device in devices:
+        devices_info.append({
+            'id': device.id,
+            'is_online': device.is_online,
+            'connection_time': device.get_connection_time_formatted() if device.is_online else None,
+            'bytes_received': device.bytes_received,
+            'bytes_sent': device.bytes_sent,
+        })
+    
+    data = {
+        'online_devices': online_devices,
+        'devices_last_hour': devices_last_hour,
+        'users_last_hour': users_last_hour,
+        'devices': devices_info,
+    }
+    
+    return JsonResponse(data)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_location_history(request, pk):
+    """API для отримання історії трафіку по локації"""
+    location = get_object_or_404(Location, pk=pk)
+    
+    # Дозволяємо всім авторизованим користувачам
+    # В майбутньому можна додати перевірку прав
+    
+    # Повертаємо тестові дані для демонстрації
+    # В реальному проекті тут буде запит до моніторингу
+    from django.utils import timezone
+    from datetime import timedelta
+    import random
+    
+    # Генеруємо тестові дані за останню годину
+    now = timezone.now()
+    data = []
+    
+    for i in range(60):  # 60 точок за годину (кожна хвилина)
+        timestamp = now - timedelta(minutes=60-i)
+        # Симулюємо трафік
+        bytes_sent = random.randint(100000, 1000000)  # 100KB - 1MB
+        bytes_received = random.randint(50000, 500000)  # 50KB - 500KB
+        
+        data.append({
+            'timestamp': timestamp.isoformat(),
+            'bytes_sent': bytes_sent,
+            'bytes_received': bytes_received
+        })
+    
+    return JsonResponse({'history': data})
+
+
+@login_required  
+@require_http_methods(["GET"])
+def api_peer_history(request, pk):
+    """API для отримання історії трафіку пристрою"""
+    device = get_object_or_404(Device, pk=pk)
+    
+    # Перевіряємо права доступу
+    if not request.user.is_staff and device.user != request.user:
+        return JsonResponse({'error': 'Немає прав доступу'}, status=403)
+    
+    # Повертаємо тестові дані для демонстрації
+    from django.utils import timezone
+    from datetime import timedelta
+    import random
+    
+    # Генеруємо тестові дані за останню годину
+    now = timezone.now()
+    data = []
+    
+    for i in range(60):  # 60 точок за годину (кожна хвилина)
+        timestamp = now - timedelta(minutes=60-i)
+        # Симулюємо трафік для конкретного пристрою
+        bytes_sent = random.randint(10000, 100000)  # 10KB - 100KB
+        bytes_received = random.randint(5000, 50000)  # 5KB - 50KB
+        
+        data.append({
+            'timestamp': timestamp.isoformat(),
+            'bytes_sent': bytes_sent,
+            'bytes_received': bytes_received
+        })
+    
+    return JsonResponse({'history': data})
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_refresh_location_stats(request, pk):
+    """API для швидкого оновлення статистик локації"""
+    from django.core.management import call_command
+    from io import StringIO
+    
+    location = get_object_or_404(Location, pk=pk)
+    
+    try:
+        # Викликаємо швидку команду синхронізації
+        out = StringIO()
+        call_command('fast_sync_stats', interface=location.interface_name, stdout=out)
+        
+        # Підраховуємо оновлені пристрої
+        updated_devices = location.devices.filter(status='active').count()
+        
+        return JsonResponse({
+            'success': True,
+            'updated_devices': updated_devices,
+            'message': f'Статистики оновлені для інтерфейсу {location.interface_name}'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

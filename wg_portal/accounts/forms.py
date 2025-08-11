@@ -156,7 +156,7 @@ class UserAdminForm(forms.ModelForm):
         fields = [
             'username', 'email', 'first_name', 'last_name', 'phone',
             'department', 'position', 'is_active', 'is_staff', 'is_superuser',
-            'is_wireguard_enabled', 'data_limit'
+            'is_wireguard_enabled', 'data_limit', 'is_premium', 'premium_expires'
         ]
         widgets = {
             'username': forms.TextInput(attrs={

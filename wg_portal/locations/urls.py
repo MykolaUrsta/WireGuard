@@ -37,4 +37,8 @@ urlpatterns = [
     # API endpoints
     path('api/networks/<int:pk>/info/', views.api_network_info, name='api_network_info'),
     path('api/devices/<int:pk>/toggle/', views.api_toggle_device, name='api_toggle_device'),
+    path('api/location-stats/<int:pk>/', views.api_location_stats, name='api_location_stats'),
+    path('api/location-history/<int:pk>/', views.api_location_history, name='api_location_history'),
+    path('api/peer-history/<int:pk>/', views.api_peer_history, name='api_peer_history'),
+    path('api/refresh-stats/<int:pk>/', views.api_refresh_location_stats, name='api_refresh_location_stats'),
 ]

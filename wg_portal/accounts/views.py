@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login, authenticate, logout
+from django.contrib.auth import login, authenticate, logout, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
@@ -14,6 +14,7 @@ import qrcode
 from io import BytesIO
 import base64
 import json
+from datetime import timedelta
 from .models import CustomUser
 from .forms import UserRegistrationForm, UserLoginForm, Enable2FAForm, UserAdminForm, UserFilterForm
 from audit_logging.models import UserActionLog
@@ -126,9 +127,10 @@ def vpn_overview(request):
     # Навантаження мережі (умовно)
     network_load = min(85, (active_connections / max(total_peers, 1)) * 100)
     
-    # Активні користувачі з детальною інформацією
+    # Активні користувачі з детальною інформацією - тільки дійсно онлайн користувачі
     connected_users = WireGuardPeer.objects.filter(
-        is_active=True
+        is_active=True,
+        last_handshake__gte=timezone.now() - timedelta(seconds=180)
     ).select_related('user', 'server').order_by('-last_handshake')[:10]
     
     # Активність користувачів
@@ -161,6 +163,43 @@ def vpn_overview(request):
         'servers': WireGuardServer.objects.all()[:5],
     }
     return render(request, 'accounts/vpn_overview.html', context)
+
+
+@login_required
+def connected_users_api(request):
+    """API для отримання списку підключених користувачів"""
+    from locations.models import Device
+    from django.http import JsonResponse
+    from django.utils import timezone
+    
+    # Отримуємо тільки дійсно онлайн користувачів
+    all_devices = Device.objects.filter(
+        status='active'
+    ).select_related('user', 'location').order_by('-last_handshake')
+    
+    # Фільтруємо тільки активні пристрої (з handshake менше 5 хвилин тому)
+    connected_devices = [device for device in all_devices if device.is_online]
+    
+    users_data = []
+    for device in connected_devices:
+        # Розраховуємо час підключення
+        connection_time = device.get_connection_time_formatted() if hasattr(device, 'get_connection_time_formatted') else "00:00"
+        
+        users_data.append({
+            'id': device.id,
+            'username': device.user.username,
+            'full_name': device.user.get_full_name() or device.user.username,
+            'device_name': device.name,
+            'ip_address': device.ip_address,
+            'location_name': device.location.name if device.location else 'Unknown',
+            'connection_time': connection_time,
+            'bytes_sent': device.bytes_sent or 0,
+            'bytes_received': device.bytes_received or 0,
+            'last_handshake': device.last_handshake.isoformat() if device.last_handshake else None,
+            'avatar_initials': (device.user.first_name[:1] + device.user.last_name[:1]).upper() if device.user.first_name and device.user.last_name else device.user.username[:1].upper()
+        })
+    
+    return JsonResponse({'users': users_data})
 
 
 @login_required
@@ -657,3 +696,156 @@ def user_detail(request, pk):
     }
     
     return render(request, 'accounts/user_detail.html', context)
+
+
+@login_required
+def device_config_modal(request, device_id):
+    """API для отримання конфігурації пристрою та QR-коду"""
+    from locations.models import Device
+    from django.http import JsonResponse
+    import qrcode
+    import io
+    import base64
+    
+    device = get_object_or_404(Device, pk=device_id)
+    
+    # Перевіряємо права доступу
+    if request.user != device.user and not request.user.is_staff:
+        return JsonResponse({'error': 'Немає прав доступу'}, status=403)
+    
+    try:
+        # Генеруємо конфігурацію
+        config_content = device.get_config()
+        
+        # Створюємо QR-код
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(config_content)
+        qr.make(fit=True)
+        
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Конвертуємо в base64
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        img_str = base64.b64encode(buffer.getvalue()).decode()
+        
+        return JsonResponse({
+            'device_name': device.name,
+            'config': config_content,
+            'qr_code': f"data:image/png;base64,{img_str}",
+            'device_ip': device.ip_address,
+            'server_endpoint': f"{device.location.server_ip}:{device.location.server_port}",
+            'connection_time': device.get_connection_time_formatted() if hasattr(device, 'get_connection_time_formatted') else '00:00',
+            'bytes_sent': device.bytes_sent or 0,
+            'bytes_received': device.bytes_received or 0,
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Помилка генерації конфігурації: {str(e)}'}, status=500)
+
+
+@login_required
+def device_delete(request, device_id):
+    """Видалення пристрою"""
+    from locations.models import Device
+    from django.http import JsonResponse
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Тільки POST запити'}, status=405)
+    
+    device = get_object_or_404(Device, pk=device_id)
+    
+    # Перевіряємо права доступу
+    if request.user != device.user and not request.user.is_staff:
+        return JsonResponse({'error': 'Немає прав доступу'}, status=403)
+    
+    try:
+        device_name = device.name
+        location = device.location
+        
+        # Видаляємо пристрій
+        device.delete()
+        
+        # Оновлюємо конфігурацію WireGuard
+        try:
+            from locations.docker_manager import DockerManager
+            docker_manager = DockerManager()
+            docker_manager.update_wireguard_config(location)
+        except Exception as config_error:
+            # Логуємо помилку, але не зупиняємо видалення
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Помилка оновлення WireGuard конфігурації після видалення пристрою: {config_error}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Пристрій "{device_name}" видалено успішно'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Помилка видалення: {str(e)}'}, status=500)
+
+
+@login_required
+def user_devices_api(request, user_id):
+    """API для отримання списку пристроїв користувача (для real-time оновлення)"""
+    from locations.models import Device
+    from django.http import JsonResponse
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    user = get_object_or_404(get_user_model(), pk=user_id)
+    
+    # Перевіряємо права доступу
+    if request.user != user and not request.user.is_staff:
+        return JsonResponse({'error': 'Немає прав доступу'}, status=403)
+    
+    devices = Device.objects.filter(user=user).select_related('location', 'network')
+    
+    devices_data = []
+    for device in devices:
+        # Розраховуємо час підключення
+        connection_time = "00:00"
+        is_connected = False
+        
+        if device.connected_at and device.last_handshake:
+            time_diff = timezone.now() - device.last_handshake
+            if time_diff < timedelta(minutes=3):  # Онлайн якщо handshake менше 3 хвилин тому
+                is_connected = True
+                if device.connected_at:
+                    duration = int((timezone.now() - device.connected_at).total_seconds())
+                    hours = duration // 3600
+                    minutes = (duration % 3600) // 60
+                    seconds = duration % 60
+                    
+                    if hours > 0:
+                        connection_time = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                    else:
+                        connection_time = f"{minutes:02d}:{seconds:02d}"
+        
+        # Статус підключення
+        if is_connected:
+            connection_status = "Connected"
+        elif device.last_handshake:
+            time_diff = timezone.now() - device.last_handshake
+            if time_diff.days > 0:
+                connection_status = f"Last seen {time_diff.days} days ago"
+            else:
+                connection_status = "Disconnected"
+        else:
+            connection_status = "Never connected"
+        
+        devices_data.append({
+            'id': device.id,
+            'name': device.name,
+            'ip_address': device.ip_address,
+            'is_connected': is_connected,
+            'connection_status': connection_status,
+            'connection_time': connection_time,
+            'bytes_sent': device.bytes_sent or 0,
+            'bytes_received': device.bytes_received or 0,
+            'last_handshake': device.last_handshake.isoformat() if device.last_handshake else None,
+            'public_ip': device.location.server_ip if device.location else None,
+        })
+    
+    return JsonResponse({'devices': devices_data})

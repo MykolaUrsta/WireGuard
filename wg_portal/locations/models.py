@@ -69,6 +69,12 @@ class Location(models.Model):
         verbose_name="DNS сервери",
         help_text="DNS сервери через кому"
     )
+    allowed_ips = models.CharField(
+        max_length=255,
+        default="0.0.0.0/0",
+        verbose_name="Дозволені IP/мережі",
+        help_text="Список дозволених IP адрес або мереж через кому (наприклад: 0.0.0.0/0 для всього трафіку, або 192.168.1.0/24,10.0.0.0/8)"
+    )
     is_active = models.BooleanField(
         default=True,
         verbose_name="Активна"
@@ -97,6 +103,24 @@ class Location(models.Model):
             self.subnet = str(network)
         except ValueError:
             raise ValidationError({'subnet': 'Невірний формат підмережі'})
+        
+        # Автоматично призначаємо інтерфейс якщо не вказаний
+        if not self.interface_name or self.interface_name == 'wg0':
+            self.interface_name = self.get_next_available_interface()
+
+    @classmethod
+    def get_next_available_interface(cls):
+        """Повертає наступний доступний WireGuard інтерфейс"""
+        existing_interfaces = set(
+            cls.objects.values_list('interface_name', flat=True)
+        )
+        
+        for i in range(100):  # Максимум 100 інтерфейсів
+            interface = f'wg{i}'
+            if interface not in existing_interfaces:
+                return interface
+        
+        return 'wg0'  # Fallback
 
     @property
     def network(self):
@@ -121,6 +145,103 @@ class Location(models.Model):
             if str(ip) not in used_ips:
                 return str(ip)
         return None
+
+    def save(self, *args, **kwargs):
+        """Зберігає локацію та оновлює WireGuard конфігурацію"""
+        is_new = self.pk is None
+        
+        # Генеруємо ключі якщо їх немає
+        if not self.private_key or not self.public_key:
+            self._generate_keys()
+        
+        # Спочатку зберігаємо модель
+        super().save(*args, **kwargs)
+        
+        # Створюємо дефолтну мережу для нової локації
+        if is_new:
+            self._create_default_network()
+        
+        # Потім оновлюємо WireGuard конфігурацію
+        if self.is_active:
+            try:
+                from .docker_manager import WireGuardDockerManager
+                manager = WireGuardDockerManager()
+                
+                # Генеруємо конфігурацію для цієї локації
+                manager.generate_server_config(self)
+                # Генеруємо конфігурації для всіх активних локацій
+                manager.generate_all_active_configs()
+                # Перезапускаємо цей інтерфейс
+                manager.restart_wireguard(self.interface_name)
+                
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Помилка оновлення WireGuard конфігурації для локації {self.name}: {str(e)}")
+
+    def _generate_keys(self):
+        """Генерує приватний та публічний ключі WireGuard"""
+        try:
+            import subprocess
+            
+            # Генеруємо приватний ключ
+            private_key_result = subprocess.run(
+                ['wg', 'genkey'], 
+                capture_output=True, 
+                text=True, 
+                check=True
+            )
+            self.private_key = private_key_result.stdout.strip()
+            
+            # Генеруємо публічний ключ
+            public_key_result = subprocess.run(
+                ['wg', 'pubkey'], 
+                input=self.private_key,
+                capture_output=True, 
+                text=True, 
+                check=True
+            )
+            self.public_key = public_key_result.stdout.strip()
+            
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Якщо wg недоступний, генеруємо фейкові ключі для розробки
+            import secrets
+            import base64
+            
+            # Генеруємо 32 байти для ключа
+            private_bytes = secrets.token_bytes(32)
+            self.private_key = base64.b64encode(private_bytes).decode('ascii')
+            
+            public_bytes = secrets.token_bytes(32)
+            self.public_key = base64.b64encode(public_bytes).decode('ascii')
+
+    def _create_default_network(self):
+        """Створює дефолтну мережу для нової локації"""
+        try:
+            from .models import Network
+            
+            # Перевіряємо чи немає вже мережі
+            if self.networks.exists():
+                return
+            
+            Network.objects.create(
+                name=f"{self.name} - Default Network",
+                location=self,
+                subnet=self.subnet,
+                interface=self.interface_name,
+                server_port=self.server_port,
+                listen_port=self.server_port,
+                server_public_key=self.public_key,
+                server_ip=self.server_ip,
+                allowed_ips=self.allowed_ips or "0.0.0.0/0",
+                dns_servers=self.dns_servers,
+                is_active=True
+            )
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Помилка створення дефолтної мережі: {str(e)}")
 
 
 class DeviceGroup(models.Model):
@@ -182,6 +303,29 @@ class Network(models.Model):
         verbose_name="Порт сервера",
         help_text="UDP порт WireGuard сервера"
     )
+    listen_port = models.PositiveIntegerField(
+        default=51820,
+        verbose_name="Порт прослуховування",
+        help_text="UDP порт WireGuard для прослуховування"
+    )
+    server_public_key = models.CharField(
+        max_length=44,
+        verbose_name="Публічний ключ сервера",
+        help_text="WireGuard публічний ключ сервера"
+    )
+    server_ip = models.GenericIPAddressField(
+        protocol='IPv4',
+        verbose_name="IP сервера",
+        help_text="IP адреса сервера в мережі",
+        null=True,
+        blank=True
+    )
+    allowed_ips = models.CharField(
+        max_length=255,
+        default="0.0.0.0/0",
+        verbose_name="Дозволені IP",
+        help_text="Список дозволених IP адрес або підмереж"
+    )
     dns_servers = models.CharField(
         max_length=255,
         default="1.1.1.1,8.8.8.8",
@@ -207,6 +351,27 @@ class Network(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.subnet})"
+
+    def save(self, *args, **kwargs):
+        """Зберігає мережу та оновлює WireGuard конфігурацію"""
+        # Спочатку зберігаємо модель
+        super().save(*args, **kwargs)
+        
+        # Оновлюємо WireGuard конфігурацію для пов'язаної локації
+        if self.location and self.location.is_active and self.is_active:
+            try:
+                from .docker_manager import WireGuardDockerManager
+                manager = WireGuardDockerManager()
+                
+                # Генеруємо конфігурацію для локації цієї мережі
+                manager.generate_server_config(self.location)
+                # Перезапускаємо інтерфейс
+                manager.restart_wireguard(self.location.interface_name)
+                
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Помилка оновлення WireGuard конфігурації для мережі {self.name}: {str(e)}")
 
 
 class AccessControlList(models.Model):
@@ -349,7 +514,14 @@ class Device(models.Model):
     last_handshake = models.DateTimeField(
         null=True,
         blank=True,
-        verbose_name="Останнє підключення"
+        verbose_name="Час підключення",
+        help_text="Час останнього активного підключення (оновлюється при трафіку)"
+    )
+    connected_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Початковий час підключення",
+        help_text="Час першого підключення в сесії"
     )
     bytes_sent = models.BigIntegerField(
         default=0,
@@ -379,16 +551,137 @@ class Device(models.Model):
 
     @property
     def is_online(self):
-        """Чи пристрій онлайн (на основі останнього handshake)"""
+        """Чи пристрій онлайн (на основі last_handshake як часу підключення)"""
+        if self.status != 'active':
+            return False
+            
+        # last_handshake показує час підключення
+        # Якщо немає трафіку протягом 1 хвилини - пристрій вважається відключеним
         if not self.last_handshake:
             return False
+            
         from django.utils import timezone
-        return (timezone.now() - self.last_handshake).seconds < 300  # 5 хвилин
+        # Перевіряємо, чи був трафік протягом останньої 1 хвилини
+        time_since_handshake = (timezone.now() - self.last_handshake).total_seconds()
+        return time_since_handshake < 60  # 1 хвилина
+
+    @property
+    def is_connected(self):
+        """Псевдонім для is_online для сумісності"""
+        return self.is_online
 
     @property
     def traffic_total(self):
         """Загальний трафік"""
         return self.bytes_sent + self.bytes_received
+    
+    def update_traffic(self, bytes_sent, bytes_received):
+        """Оновлює трафік та час підключення (last_handshake)"""
+        old_total = self.traffic_total
+        self.bytes_sent = bytes_sent
+        self.bytes_received = bytes_received
+        new_total = self.traffic_total
+        
+        # Якщо трафік змінився, оновлюємо last_handshake як час активного підключення
+        if new_total != old_total:
+            from django.utils import timezone
+            self.last_handshake = timezone.now()
+    
+    def get_connection_time_formatted(self):
+        """Повертає відформатований час підключення на основі last_handshake"""
+        if not self.last_handshake or not self.is_online:
+            return "00:00"
+        
+        from django.utils import timezone
+        duration = int((timezone.now() - self.last_handshake).total_seconds())
+        
+        hours = duration // 3600
+        minutes = (duration % 3600) // 60
+        seconds = duration % 60
+        
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        else:
+            return f"{minutes:02d}:{seconds:02d}"
+
+    def generate_config(self):
+        """Генерує конфігурацію WireGuard для пристрою"""
+        return self.get_config()
+
+    def get_config(self):
+        """Генерує конфігурацію WireGuard для пристрою"""
+        import ipaddress
+        
+        # Отримуємо мережу та її параметри
+        network = self.network
+        if not network:
+            return "# Error: No network assigned to device"
+        
+        # Розрахунок маски підмережі
+        network_ip = ipaddress.IPv4Network(network.subnet)
+        
+        config = f"""[Interface]
+PrivateKey = {self.private_key if self.private_key else 'YOUR_PRIVATE_KEY'}
+Address = {self.ip_address}/{network_ip.prefixlen}
+DNS = {network.dns_servers or '8.8.8.8, 8.8.4.4'}
+
+[Peer]
+PublicKey = {network.server_public_key}
+Endpoint = {self.location.server_ip}:{network.listen_port}
+AllowedIPs = {self.location.allowed_ips or '0.0.0.0/0'}
+PersistentKeepalive = 25
+"""
+        return config
+
+    def save(self, *args, **kwargs):
+        """Зберігає пристрій та оновлює WireGuard конфігурацію"""
+        is_new = self.pk is None
+        old_device = None
+        
+        # Якщо це оновлення, зберігаємо старі дані
+        if not is_new:
+            try:
+                old_device = Device.objects.get(pk=self.pk)
+            except Device.DoesNotExist:
+                pass
+        
+        # Зберігаємо модель
+        super().save(*args, **kwargs)
+        
+        # Оновлюємо WireGuard конфігурацію
+        try:
+            from .docker_manager import WireGuardDockerManager
+            manager = WireGuardDockerManager()
+            
+            if self.status == 'active' and self.public_key:
+                # Додаємо або оновлюємо peer
+                manager.add_peer_to_server(self)
+            elif old_device and old_device.public_key:
+                # Видаляємо старий peer якщо пристрій деактивований
+                manager.remove_peer_from_server(old_device)
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Помилка оновлення WireGuard peer для пристрою {self.name}: {str(e)}")
+
+    def delete(self, *args, **kwargs):
+        """Видаляє пристрій та прибирає його з WireGuard конфігурації"""
+        try:
+            from .docker_manager import WireGuardDockerManager
+            manager = WireGuardDockerManager()
+            
+            # Видаляємо peer з сервера
+            if self.public_key:
+                manager.remove_peer_from_server(self)
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Помилка видалення WireGuard peer для пристрою {self.name}: {str(e)}")
+        
+        # Видаляємо модель
+        super().delete(*args, **kwargs)
 
 
 class ACLRule(models.Model):

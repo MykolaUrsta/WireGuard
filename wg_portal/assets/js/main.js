@@ -125,8 +125,8 @@ function toggleTheme() {
 }
 
 function checkNetworkStatus() {
-    // TODO: Implement proper API endpoint when ready
-    console.log('Network status monitoring disabled');
+    // Network status monitoring is handled by page-specific scripts
+    // No need for global monitoring
 }
 
 function updateNetworkIndicators(data) {

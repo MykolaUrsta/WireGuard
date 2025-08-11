@@ -6,7 +6,7 @@ class LocationForm(forms.ModelForm):
     class Meta:
         model = Location
         fields = ['name', 'description', 'server_ip', 'server_port', 'subnet', 
-                 'interface_name', 'dns_servers', 'is_active']
+                 'interface_name', 'dns_servers', 'allowed_ips', 'is_active']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Назва локації'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Опис локації'}),
@@ -15,6 +15,7 @@ class LocationForm(forms.ModelForm):
             'subnet': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '10.13.13.0/24'}),
             'interface_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'wg0'}),
             'dns_servers': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '1.1.1.1,8.8.8.8'}),
+            'allowed_ips': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '0.0.0.0/0 або 192.168.1.0/24,10.0.0.0/8'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 

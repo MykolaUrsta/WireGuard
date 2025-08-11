@@ -1,28 +1,5 @@
 #!/bin/bash
 
-# Wait for database to be ready
-echo "Waiting for database..."
-while ! nc -z db 5432; do
-  sleep 0.1
-done
-echo "Database started"
-
-# Create migrations for all apps if they don't exist
-echo "Creating migrations for all apps..."
-python manage.py makemigrations accounts || true
-python manage.py makemigrations wireguard_management || true
-python manage.py makemigrations audit_logging || true
-
-# Run migrations for auth first (required by other apps)
-echo "Running auth migrations..."
-python manage.py migrate auth
-
-# Run migrations for all apps
-echo "Running all migrations..."
-python manage.py migrate
-
-#!/bin/bash
-
 set -e
 
 echo "=== WireGuard Portal Starting ==="
@@ -50,7 +27,12 @@ fi
 
 # Run migrations
 echo "📊 Running database migrations..."
-python manage.py makemigrations --noinput
+# Create migrations for all apps
+python manage.py makemigrations accounts --noinput || true
+python manage.py makemigrations wireguard_management --noinput || true
+python manage.py makemigrations locations --noinput || true
+python manage.py makemigrations audit_logging --noinput || true
+# Run all migrations
 python manage.py migrate --noinput
 
 # Collect static files
@@ -88,71 +70,37 @@ else:
     print('ℹ️ Superuser already exists')
 "
     
-    # Create sample WireGuard network
-    echo "🌐 Creating default WireGuard network..."
-    
-    # Set default values if env vars are not set
-    WIREGUARD_SUBNET=${WIREGUARD_SUBNET:-10.0.0.0/24}
-    WIREGUARD_SERVER_IP=${WIREGUARD_SERVER_IP:-10.0.0.1}
-    WIREGUARD_SERVER_PORT=${WIREGUARD_SERVER_PORT:-51820}
-    
-    python manage.py shell -c "
-from wireguard_management.models import WireGuardNetwork, WireGuardServer
-import subprocess
 
-# Create default network if it doesn't exist
-if not WireGuardNetwork.objects.exists():
-    network = WireGuardNetwork.objects.create(
-        name='Default Network',
-        network_cidr='$WIREGUARD_SUBNET',
-        description='Default WireGuard network for internal use',
-        is_active=True
-    )
-    
-    # Generate server keys
-    try:
-        private_key = subprocess.check_output(['wg', 'genkey'], text=True).strip()
-        public_key = subprocess.check_output(['wg', 'pubkey'], input=private_key, text=True).strip()
-        
-        # Create default server
-        server = WireGuardServer.objects.create(
-            name='Main Server',
-            network=network,
-            endpoint='0.0.0.0',
-            listen_port=$WIREGUARD_SERVER_PORT,
-            public_key=public_key,
-            private_key=private_key,
-            server_ip='$WIREGUARD_SERVER_IP',
-            is_active=True
-        )
-        print('✅ Default WireGuard network and server created')
-        print(f'📋 Network: $WIREGUARD_SUBNET')
-        print(f'🖥️ Server IP: $WIREGUARD_SERVER_IP:$WIREGUARD_SERVER_PORT')
-    except Exception as e:
-        print(f'⚠️ Could not create WireGuard server: {e}')
-else:
-    print('ℹ️ WireGuard network already exists')
-"
 
     # Mark as initialized
     touch /app/.initialized
     echo "✅ Application initialized successfully"
 fi
 
+# Setup cron for stats updates (every minute) - run as root for Docker access
+echo "⏰ Setting up stats sync cron job..."
+(crontab -l 2>/dev/null || true; echo "* * * * * cd /app && sudo -u root python manage.py fast_sync_stats --quiet >/dev/null 2>&1") | crontab -
+service cron start || true
+
+# Run initial stats sync as root
+echo "📊 Running initial stats synchronization..."
+sudo -u root python manage.py fast_sync_stats --quiet || true
+
+# Start background stats sync process (configurable interval) - run as root
+SYNC_INTERVAL=${SYNC_INTERVAL:-1}
+echo "🔄 Starting background stats sync process (every ${SYNC_INTERVAL} seconds)..."
+(
+    while true; do
+        sleep $SYNC_INTERVAL
+        sudo -u root python manage.py fast_sync_stats --quiet >/dev/null 2>&1 || true
+    done
+) &
+
 # Start server
 echo "🚀 Starting Django development server..."
 echo "📍 Admin panel: http://localhost/admin"
 echo "👤 Login: ${ADMIN_USERNAME:-admin} / ${ADMIN_PASSWORD:-admin123}"
-echo "🌐 WireGuard Network: ${WIREGUARD_SUBNET:-10.0.0.0/24}"
-echo "🖥️ Server: ${WIREGUARD_SERVER_IP:-10.0.0.1}:${WIREGUARD_SERVER_PORT:-51820}"
+echo "🌐 Create WireGuard networks through Locations panel"
 echo "========================="
 
 exec python manage.py runserver 0.0.0.0:8000
-
-# Collect static files
-echo "Collecting static files..."
-python manage.py collectstatic --noinput
-
-echo "Starting Gunicorn..."
-# Start Gunicorn
-exec gunicorn wireguard_manager.wsgi:application --bind 0.0.0.0:8000 --workers 3

@@ -22,4 +22,10 @@ urlpatterns = [
     # API endpoints for VPN authentication
     path('api/vpn/auth/', views.vpn_auth_check, name='vpn_auth_check'),
     path('api/vpn/2fa/', views.vpn_2fa_verify, name='vpn_2fa_verify'),
+    
+    # API endpoints for real-time data
+    path('api/connected-users/', views.connected_users_api, name='connected_users_api'),
+    path('api/device/<int:device_id>/config/', views.device_config_modal, name='device_config_modal'),
+    path('api/device/<int:device_id>/delete/', views.device_delete, name='device_delete'),
+    path('api/user/<int:user_id>/devices/', views.user_devices_api, name='user_devices_api'),
 ]

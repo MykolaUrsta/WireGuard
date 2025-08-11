@@ -1,0 +1,251 @@
+{% extends 'layouts/index.html' %}
+{% load static %}
+
+{% block title %}Редагувати локацію{% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h1 class="h3 mb-1">Редагувати локацію: {{ location.name }}</h1>
+                        <p class="text-muted">Зміна налаштувань WireGuard локації</p>
+                    </div>
+                    <div>
+                        <a href="{% url 'locations:detail' location.pk %}" class="btn btn-outline-secondary me-2">
+                            <i class="bi bi-arrow-left"></i> Назад до локації
+                        </a>
+                        <a href="{% url 'locations:actual_list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-list"></i> Всі локації
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Form Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-pencil me-2"></i>
+                            Редагування конфігурації локації
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="post" id="locationForm">
+                            {% csrf_token %}
+                            
+                            <!-- Основні налаштування локації -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <h6 class="text-primary mb-3">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        Основні налаштування
+                                    </h6>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="name" class="form-label">
+                                            Назва локації <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" class="form-control" id="name" name="name" 
+                                               value="{{ location.name }}" required>
+                                        <div class="form-text">Унікальна назва для ідентифікації локації</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="description" class="form-label">Опис</label>
+                                        <input type="text" class="form-control" id="description" name="description" 
+                                               value="{{ location.description }}">
+                                        <div class="form-text">Додатковий опис локації (необов'язково)</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Мережеві налаштування -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <h6 class="text-primary mb-3">
+                                        <i class="bi bi-network-widescreen me-2"></i>
+                                        Мережеві налаштування
+                                    </h6>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="server_ip" class="form-label">
+                                            IP адреса сервера <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" class="form-control" id="server_ip" name="server_ip" 
+                                               value="{{ location.server_ip }}" required>
+                                        <div class="form-text">Зовнішній IP адрес WireGuard сервера</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="server_port" class="form-label">
+                                            Порт сервера <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="number" class="form-control" id="server_port" name="server_port" 
+                                               value="{{ location.server_port }}" min="1" max="65535" required>
+                                        <div class="form-text">UDP порт для WireGuard (за замовчуванням 51820)</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="subnet" class="form-label">
+                                            Підмережа <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" class="form-control" id="subnet" name="subnet" 
+                                               value="{{ location.subnet }}" required>
+                                        <div class="form-text">Приватна підмережа в форматі CIDR (напр: 10.13.13.0/24)</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="interface_name" class="form-label">
+                                            Ім'я інтерфейсу <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" class="form-control" id="interface_name" name="interface_name" 
+                                               value="{{ location.interface_name }}" required>
+                                        <div class="form-text">Назва WireGuard інтерфейсу (напр: wg0)</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-12">
+                                    <div class="mb-3">
+                                        <label for="dns_servers" class="form-label">DNS сервери</label>
+                                        <input type="text" class="form-control" id="dns_servers" name="dns_servers" 
+                                               value="{{ location.dns_servers }}">
+                                        <div class="form-text">DNS сервери через кому (напр: 1.1.1.1,8.8.8.8)</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-12">
+                                    <div class="mb-3">
+                                        <label for="allowed_ips" class="form-label">Дозволені IP/мережі</label>
+                                        <input type="text" class="form-control" id="allowed_ips" name="allowed_ips" 
+                                               value="{{ location.allowed_ips }}" placeholder="0.0.0.0/0">
+                                        <div class="form-text">Список дозволених IP адрес або мереж через кому (наприклад: 0.0.0.0/0 для всього трафіку, або 192.168.1.0/24,10.0.0.0/8)</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- WireGuard ключі -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <h6 class="text-primary mb-3">
+                                        <i class="bi bi-key me-2"></i>
+                                        WireGuard ключі
+                                    </h6>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="public_key" class="form-label">Публічний ключ</label>
+                                        <textarea class="form-control" id="public_key" name="public_key" rows="3" readonly>{{ location.public_key }}</textarea>
+                                        <div class="form-text">Автоматично згенерований публічний ключ сервера</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="private_key" class="form-label">Приватний ключ</label>
+                                        <textarea class="form-control" id="private_key" name="private_key" rows="3" readonly>{{ location.private_key }}</textarea>
+                                        <div class="form-text">Автоматично згенерований приватний ключ сервера</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Статус -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <h6 class="text-primary mb-3">
+                                        <i class="bi bi-toggle-on me-2"></i>
+                                        Статус
+                                    </h6>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                                   {% if location.is_active %}checked{% endif %}>
+                                            <label class="form-check-label" for="is_active">
+                                                Активна локація
+                                            </label>
+                                        </div>
+                                        <div class="form-text">Чи буде локація доступна для створення пристроїв</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Кнопки дій -->
+                            <div class="row">
+                                <div class="col-12">
+                                    <hr>
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="bi bi-check-lg me-2"></i>
+                                                Зберегти зміни
+                                            </button>
+                                            <a href="{% url 'locations:detail' location.pk %}" class="btn btn-secondary ms-2">
+                                                <i class="bi bi-x-lg me-2"></i>
+                                                Скасувати
+                                            </a>
+                                        </div>
+                                        <div>
+                                            <button type="button" class="btn btn-warning" onclick="regenerateKeys()">
+                                                <i class="bi bi-arrow-clockwise me-2"></i>
+                                                Перегенерувати ключі
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function regenerateKeys() {
+    if (confirm('Ви впевнені, що хочете перегенерувати ключі? Це вплине на всі існуючі пристрої!')) {
+        // Відправляємо AJAX запит для регенерації ключів
+        fetch('{% url "locations:edit" location.pk %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: 'regenerate_keys=true'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('public_key').value = data.public_key;
+                document.getElementById('private_key').value = data.private_key;
+                alert('Ключі успішно перегенеровані!');
+            } else {
+                alert('Помилка при генерації ключів: ' + (data.error || 'Невідома помилка'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Помилка при генерації ключів');
+        });
+    }
+}
+</script>
+{% endblock %}

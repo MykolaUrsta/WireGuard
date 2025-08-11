@@ -54,7 +54,7 @@
                 <div class="card-body">
                     <div class="connected-users-grid" id="usersGrid">
                         {% for peer in connected_users %}
-                        <div class="user-card">
+                        <div class="user-card" data-peer-id="{{ peer.id }}">
                             <div class="user-avatar">
                                 {{ peer.user.first_name|first|default:peer.user.username|first|upper }}{{ peer.user.last_name|first|upper|default:"" }}
                             </div>
@@ -63,11 +63,7 @@
                                 <div class="user-details">
                                     <div class="connection-time">
                                         <i class="fas fa-clock"></i>
-                                        {% if peer.connected_at %}
-                                            {{ peer.connected_at|timesince }}
-                                        {% else %}
-                                            Active
-                                        {% endif %}
+                                        <span class="time-display">{{ peer.get_connection_time_formatted }}</span>
                                     </div>
                                     <div class="device-info">
                                         <i class="fas fa-{{ peer.device_type|default:'desktop' }}"></i>
@@ -77,24 +73,21 @@
                             </div>
                             <div class="user-stats">
                                 <div class="stat-item">
-                                    <span class="stat-label">Devices:</span>
-                                    <span class="stat-value">
-                                        <i class="fas fa-desktop"></i>
-                                        <i class="fas fa-mobile-alt"></i>
-                                    </span>
+                                    <span class="stat-label">IP:</span>
+                                    <span class="stat-value">{{ peer.ip_address }}</span>
                                 </div>
                                 <div class="stat-item">
-                                    <span class="stat-label">Connections:</span>
-                                    <span class="stat-value">{{ peer.connection_count|default:1 }}</span>
+                                    <span class="stat-label">Сервер:</span>
+                                    <span class="stat-value">{{ peer.server.name }}</span>
                                 </div>
                                 <div class="traffic-mini">
                                     <span class="traffic-item">
                                         <i class="fas fa-arrow-up text-primary"></i>
-                                        {{ peer.bytes_sent|filesizeformat|default:"0 B" }}
+                                        <span class="bytes-sent">{{ peer.bytes_sent|filesizeformat|default:"0 B" }}</span>
                                     </span>
                                     <span class="traffic-item">
                                         <i class="fas fa-arrow-down text-success"></i>
-                                        {{ peer.bytes_received|filesizeformat|default:"0 B" }}
+                                        <span class="bytes-received">{{ peer.bytes_received|filesizeformat|default:"0 B" }}</span>
                                     </span>
                                 </div>
                             </div>
@@ -102,7 +95,7 @@
                         {% empty %}
                         <div class="no-users">
                             <i class="fas fa-users fa-3x text-muted mb-3"></i>
-                            <p class="text-muted">No users currently connected</p>
+                            <p class="text-muted">Немає підключених користувачів</p>
                         </div>
                         {% endfor %}
                     </div>
@@ -136,6 +129,139 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+    
+    // Real-time updates
+    function updateConnectedUsers() {
+        fetch('/accounts/api/connected-users/')
+            .then(response => response.json())
+            .then(data => {
+                const usersGrid = document.getElementById('usersGrid');
+                const currentUserCards = usersGrid.querySelectorAll('.user-card');
+                const currentUserIds = Array.from(currentUserCards).map(card => card.dataset.peerId);
+                
+                // Remove disconnected users
+                data.users.forEach(user => {
+                    const userCard = usersGrid.querySelector(`[data-peer-id="${user.id}"]`);
+                    if (userCard) {
+                        // Update existing user card
+                        const timeDisplay = userCard.querySelector('.time-display');
+                        const bytesSent = userCard.querySelector('.bytes-sent');
+                        const bytesReceived = userCard.querySelector('.bytes-received');
+                        
+                        if (timeDisplay) timeDisplay.textContent = user.connection_time;
+                        if (bytesSent) bytesSent.textContent = formatBytes(user.bytes_sent);
+                        if (bytesReceived) bytesReceived.textContent = formatBytes(user.bytes_received);
+                    }
+                });
+                
+                // Remove cards for users no longer connected
+                const connectedUserIds = data.users.map(user => user.id.toString());
+                currentUserCards.forEach(card => {
+                    if (!connectedUserIds.includes(card.dataset.peerId)) {
+                        card.style.transition = 'opacity 0.3s ease-out';
+                        card.style.opacity = '0';
+                        setTimeout(() => {
+                            if (card.parentNode) {
+                                card.remove();
+                            }
+                        }, 300);
+                    }
+                });
+                
+                // Add new users
+                data.users.forEach(user => {
+                    if (!usersGrid.querySelector(`[data-peer-id="${user.id}"]`)) {
+                        addUserCard(user, usersGrid);
+                    }
+                });
+                
+                // Show/hide no users message
+                const noUsersMsg = usersGrid.querySelector('.no-users');
+                if (data.users.length === 0 && !noUsersMsg) {
+                    usersGrid.innerHTML = `
+                        <div class="no-users">
+                            <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">Немає підключених користувачів</p>
+                        </div>
+                    `;
+                } else if (data.users.length > 0 && noUsersMsg) {
+                    noUsersMsg.remove();
+                }
+            })
+            .catch(error => {
+                console.error('Error updating connected users:', error);
+            });
+    }
+    
+    function addUserCard(user, container) {
+        const noUsersMsg = container.querySelector('.no-users');
+        if (noUsersMsg) noUsersMsg.remove();
+        
+        const userCard = document.createElement('div');
+        userCard.className = 'user-card';
+        userCard.dataset.peerId = user.id;
+        userCard.style.opacity = '0';
+        userCard.style.transform = 'scale(0.9)';
+        userCard.style.transition = 'opacity 0.3s ease-in, transform 0.3s ease-in';
+        
+        userCard.innerHTML = `
+            <div class="user-avatar">
+                ${user.avatar_initials}
+            </div>
+            <div class="user-info">
+                <div class="user-name">${user.full_name}</div>
+                <div class="user-details">
+                    <div class="connection-time">
+                        <i class="fas fa-clock"></i>
+                        <span class="time-display">${user.connection_time}</span>
+                    </div>
+                    <div class="device-info">
+                        <i class="fas fa-desktop"></i>
+                        ${user.device_name}
+                    </div>
+                </div>
+            </div>
+            <div class="user-stats">
+                <div class="stat-item">
+                    <span class="stat-label">IP:</span>
+                    <span class="stat-value">${user.ip_address || 'N/A'}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Сервер:</span>
+                    <span class="stat-value">${user.server_name || 'N/A'}</span>
+                </div>
+                <div class="traffic-mini">
+                    <span class="traffic-item">
+                        <i class="fas fa-arrow-up text-primary"></i>
+                        <span class="bytes-sent">${formatBytes(user.bytes_sent)}</span>
+                    </span>
+                    <span class="traffic-item">
+                        <i class="fas fa-arrow-down text-success"></i>
+                        <span class="bytes-received">${formatBytes(user.bytes_received)}</span>
+                    </span>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(userCard);
+        
+        // Animate in
+        setTimeout(() => {
+            userCard.style.opacity = '1';
+            userCard.style.transform = 'scale(1)';
+        }, 10);
+    }
+    
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+    
+    // Update every second
+    setInterval(updateConnectedUsers, 1000);
 });
 </script>
 {% endblock %}

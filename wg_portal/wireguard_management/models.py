@@ -141,6 +141,7 @@ class WireGuardPeer(models.Model):
     bytes_sent = models.BigIntegerField(default=0, verbose_name='Відправлено байт')
     bytes_received = models.BigIntegerField(default=0, verbose_name='Отримано байт')
     last_handshake = models.DateTimeField(blank=True, null=True, verbose_name='Останнє з\'єднання')
+    connected_at = models.DateTimeField(blank=True, null=True, verbose_name='Час підключення')
     
     # Стан
     is_active = models.BooleanField(default=True, verbose_name='Активний')
@@ -177,6 +178,27 @@ class WireGuardPeer(models.Model):
         if not self.last_handshake:
             return False
         return (timezone.now() - self.last_handshake).total_seconds() < 180
+    
+    def get_connection_duration(self):
+        """Повертає тривалість підключення в секундах"""
+        if not self.connected_at or not self.is_online:
+            return 0
+        return int((timezone.now() - self.connected_at).total_seconds())
+    
+    def get_connection_time_formatted(self):
+        """Повертає відформатований час підключення"""
+        duration = self.get_connection_duration()
+        if duration == 0:
+            return "Не підключено"
+        
+        hours = duration // 3600
+        minutes = (duration % 3600) // 60
+        seconds = duration % 60
+        
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        else:
+            return f"{minutes:02d}:{seconds:02d}"
     
     def generate_config(self):
         """Генерує конфігурацію для peer'а"""

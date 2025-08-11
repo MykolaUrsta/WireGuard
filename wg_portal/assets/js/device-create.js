@@ -3,10 +3,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('deviceForm');
     const step1 = document.getElementById('step1');
     const step2 = document.getElementById('step2');
-    const keyOptionInputs = document.querySelectorAll('input[name="key_option"]');
-    const publicKeyInput = document.getElementById('public_key');
-    const publicKeyGroup = document.getElementById('public_key_input');
-    const createButton = document.getElementById('nextBtn');
+    const nextButton = document.getElementById('nextBtn');
     const qrCodeDiv = document.getElementById('qr-code');
     const deviceNameSpan = document.getElementById('device-name-display');
     const deviceIpSpan = document.getElementById('device-ip-display');
@@ -14,90 +11,47 @@ document.addEventListener('DOMContentLoaded', function() {
     const downloadBtn = document.getElementById('downloadBtn');
     const backBtn = document.getElementById('backStepBtn');
     const finishBtn = document.getElementById('finishBtn');
-    const radioOptions = document.querySelectorAll('.radio-option');
     
     let deviceConfig = null;
-
-    // Handle key option changes
-    keyOptionInputs.forEach(input => {
-        input.addEventListener('change', function() {
-            if (this.value === 'provide') {
-                publicKeyGroup.style.display = 'block';
-                publicKeyInput.required = true;
-            } else {
-                publicKeyGroup.style.display = 'none';
-                publicKeyInput.required = false;
-                publicKeyInput.value = '';
-            }
-        });
-    });
-
-    // Handle radio option clicks
-    radioOptions.forEach(option => {
-        option.addEventListener('click', function() {
-            // Remove active class from all options
-            radioOptions.forEach(opt => opt.classList.remove('active'));
-            // Add active class to clicked option
-            this.classList.add('active');
-            
-            // Check the radio input
-            const radio = this.querySelector('input[type="radio"]');
-            radio.checked = true;
-            
-            // Trigger change event
-            radio.dispatchEvent(new Event('change'));
-            
-            validateForm();
-        });
-    });
 
     // Form validation
     function validateForm() {
         const name = document.getElementById('device_name').value.trim();
-        const userId = document.getElementById('user_id').value;
-        const keyOption = document.querySelector('input[name="key_option"]:checked');
+        const locationId = document.getElementById('location_id').value;
         
-        if (name && userId && keyOption) {
-            createButton.disabled = false;
-            createButton.classList.remove('disabled');
+        if (name && locationId) {
+            nextButton.disabled = false;
+            nextButton.classList.remove('disabled');
         } else {
-            createButton.disabled = true;
-            createButton.classList.add('disabled');
-        }
-        
-        if (keyOption && keyOption.value === 'provide' && !publicKeyInput.value.trim()) {
-            createButton.disabled = true;
-            createButton.classList.add('disabled');
+            nextButton.disabled = true;
+            nextButton.classList.add('disabled');
         }
     }
 
     // Add event listeners for validation
     document.getElementById('device_name').addEventListener('input', validateForm);
-    document.getElementById('user_id').addEventListener('change', validateForm);
-    keyOptionInputs.forEach(input => {
-        input.addEventListener('change', validateForm);
-    });
-    publicKeyInput.addEventListener('input', validateForm);
+    document.getElementById('location_id').addEventListener('change', validateForm);
 
-    // Submit form
-    form.addEventListener('submit', function(e) {
+    // Next button click handler
+    nextButton.addEventListener('click', function(e) {
         e.preventDefault();
         
-        if (!validateForm()) {
+        if (nextButton.disabled) {
             return;
         }
         
         // Show loading state
-        createButton.disabled = true;
-        createButton.innerHTML = '<div class="spinner"></div> Creating...';
+        nextButton.disabled = true;
+        nextButton.innerHTML = '<div class="spinner"></div> Створення...';
         
         // Prepare form data
         const formData = new FormData(form);
+        formData.append('key_option', 'generate'); // Always generate keys
         
         // Add CSRF token
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
         
-        fetch(form.action, {
+        fetch(window.location.pathname, {
             method: 'POST',
             body: formData,
             headers: {
@@ -111,26 +65,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 deviceConfig = data.device;
                 showStep2(data);
             } else {
-                showError(data.error || 'An error occurred while creating the device');
-                resetCreateButton();
+                showError(data.error || 'Сталася помилка при створенні пристрою');
+                resetNextButton();
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            showError('Network error occurred');
-            resetCreateButton();
+            showError('Помилка мережі');
+            resetNextButton();
         });
     });
 
-    function resetCreateButton() {
-        createButton.disabled = false;
-        createButton.innerHTML = 'Create Device';
+    function resetNextButton() {
+        nextButton.disabled = false;
+        const nextBtnText = document.getElementById('nextBtnText');
+        if (nextBtnText) {
+            // Don't change text if we're on step 2
+            if (step2.style.display !== 'block') {
+                nextBtnText.textContent = 'Далі';
+            }
+        } else {
+            nextButton.innerHTML = 'Далі <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M4 13h12.17l-5.59 5.59L12 20l8-8-8-8-1.41 1.41L16.17 11H4v2z"/></svg>';
+        }
     }
 
     function showStep2(data) {
         // Hide step 1, show step 2
         step1.style.display = 'none';
         step2.style.display = 'block';
+        
+        // Change next button to finish button
+        const nextBtnText = document.getElementById('nextBtnText');
+        if (nextBtnText) {
+            nextBtnText.textContent = 'Завершити';
+        }
+        nextButton.onclick = function() {
+            window.location.href = '/locations/';
+        };
         
         // Fill in device information
         deviceNameSpan.textContent = data.device.name;
@@ -140,8 +111,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Show QR code
         qrCodeDiv.innerHTML = `<img src="data:image/png;base64,${data.qr_code}" alt="QR Code" class="qr-image">`;
         
-        // Reset create button
-        resetCreateButton();
+        // Reset next button
+        resetNextButton();
     }
 
     function downloadConfig(deviceName, config) {
@@ -171,8 +142,9 @@ document.addEventListener('DOMContentLoaded', function() {
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
         
-        // Insert at top of form
-        form.insertBefore(alert, form.firstChild);
+        // Insert at top of form container
+        const formContainer = document.querySelector('.form-container');
+        formContainer.insertBefore(alert, formContainer.firstChild);
         
         // Auto dismiss after 5 seconds
         setTimeout(() => {
@@ -188,14 +160,15 @@ document.addEventListener('DOMContentLoaded', function() {
             step2.style.display = 'none';
             step1.style.display = 'block';
             
+            // Reset next button text and functionality
+            const nextBtnText = document.getElementById('nextBtnText');
+            if (nextBtnText) {
+                nextBtnText.textContent = 'Далі';
+            }
+            nextButton.onclick = null; // Remove custom onclick
+            
             // Reset form
             form.reset();
-            publicKeyGroup.style.display = 'none';
-            publicKeyInput.required = false;
-            
-            // Reset radio options
-            radioOptions.forEach(opt => opt.classList.remove('active'));
-            radioOptions[0].classList.add('active');
             
             // Clear step 2 content
             qrCodeDiv.innerHTML = '';

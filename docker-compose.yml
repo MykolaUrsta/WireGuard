@@ -37,10 +37,12 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=your-very-secret-key-change-this-in-production
       - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,wg-portal.itc.gov.ua,95.46.73.218
+      - SYNC_INTERVAL=1
     volumes:
       - wireguard_configs:/app/wireguard_configs
       - ./logs:/app/logs
-      - staticfiles:/app/staticfiles
+      - static_files:/app/staticfiles
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - db
       - redis
@@ -69,7 +71,7 @@ services:
       - SERVERPORT=51820
       - PEERS=0
       - PEERDNS=1.1.1.1,8.8.8.8
-      - INTERNAL_SUBNET=10.13.13.0
+      - INTERNAL_SUBNET=10.99.97.0
       - ALLOWEDIPS=0.0.0.0/0
       - LOG_CONFS=true
     volumes:
@@ -78,6 +80,7 @@ services:
       - ./wireguard_scripts:/scripts
     ports:
       - "51820:51820/udp"
+      - "8000-8500:8000-8500/udp"  # Діапазон портів для локацій
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     networks:
@@ -98,7 +101,7 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./ssl/certbot/conf:/etc/letsencrypt
       - ./ssl/certbot/www:/var/www/certbot
-      - staticfiles:/app/staticfiles
+      - static_files:/var/www/static
     depends_on:
       - web
     networks:
@@ -123,7 +126,7 @@ services:
 volumes:
   postgres_data:
   wireguard_configs:
-  staticfiles:
+  static_files:
 
 networks:
   wireguard_network:

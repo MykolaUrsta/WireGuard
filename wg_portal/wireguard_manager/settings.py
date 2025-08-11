@@ -202,9 +202,6 @@ LOGGING = {
 
 # WireGuard Settings
 WIREGUARD_CONFIG_DIR = BASE_DIR / 'wireguard_configs'
-WIREGUARD_SERVER_IP = '10.0.0.1'
-WIREGUARD_SUBNET = '10.0.0.0/24'
-WIREGUARD_PORT = 51820
 
 # Django OTP Settings
 OTP_TOTP_ISSUER = 'WireGuard Manager'

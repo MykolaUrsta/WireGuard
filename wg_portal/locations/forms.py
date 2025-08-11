@@ -52,7 +52,7 @@ class LocationForm(forms.ModelForm):
 
     class Meta:
         model = Location
-        fields = ['name', 'description', 'server_ip', 'server_port', 'is_active']
+        fields = ['name', 'description', 'server_ip', 'server_port', 'allowed_ips', 'is_active']
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -72,6 +72,10 @@ class LocationForm(forms.ModelForm):
                 'min': 1,
                 'max': 65535,
                 'value': 51820
+            }),
+            'allowed_ips': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '0.0.0.0/0 або 192.168.1.0/24,10.0.0.0/8'
             }),
             'is_active': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
@@ -106,6 +110,27 @@ class LocationForm(forms.ModelForm):
             if not interface.startswith('wg'):
                 raise ValidationError("Назва інтерфейсу повинна починатися з 'wg'")
         return interface
+
+    def clean_allowed_ips(self):
+        allowed_ips = self.cleaned_data.get('allowed_ips')
+        
+        if allowed_ips:
+            # Розділяємо по комах і перевіряємо кожну мережу
+            networks = [ip.strip() for ip in allowed_ips.split(',')]
+            validated_networks = []
+            
+            for network in networks:
+                if network:  # Ігноруємо порожні рядки
+                    try:
+                        # Перевіряємо чи це валідна мережа
+                        validated_network = ipaddress.IPv4Network(network, strict=False)
+                        validated_networks.append(str(validated_network))
+                    except ipaddress.AddressValueError:
+                        raise ValidationError(f"'{network}' не є валідною IP адресою або мережею CIDR")
+            
+            return ','.join(validated_networks)
+        
+        return allowed_ips
 
     def save(self, commit=True):
         location = super().save(commit=commit)

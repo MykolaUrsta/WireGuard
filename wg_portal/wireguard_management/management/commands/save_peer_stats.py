@@ -1,19 +1,20 @@
 from django.core.management.base import BaseCommand
-from wg_portal.wireguard_management.models import WireGuardPeer, PeerMonitoring
+from locations.models import Device
+from wireguard_management.models import PeerMonitoring
 from django.utils import timezone
 
 class Command(BaseCommand):
-    help = 'Зберігає поточну статистику трафіку peer\'ів для моніторингу'
+    help = 'Зберігає поточну статистику трафіку пристроїв для моніторингу'
 
     def handle(self, *args, **options):
         now = timezone.now()
         count = 0
-        for peer in WireGuardPeer.objects.all():
+        for device in Device.objects.filter(status='active'):
             PeerMonitoring.objects.create(
-                peer=peer,
-                bytes_sent=peer.bytes_sent,
-                bytes_received=peer.bytes_received,
+                peer_id=device.id,  # Використовуємо ID пристрою
+                bytes_sent=device.bytes_sent,
+                bytes_received=device.bytes_received,
                 timestamp=now
             )
             count += 1
-        self.stdout.write(self.style.SUCCESS(f'Збережено статистику для {count} peer\'ів'))
+        self.stdout.write(self.style.SUCCESS(f'Збережено статистику для {count} пристроїв'))
