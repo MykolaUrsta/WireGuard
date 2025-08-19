@@ -77,30 +77,34 @@ else:
     echo "✅ Application initialized successfully"
 fi
 
-# Setup cron for stats updates (every minute) - run as root for Docker access
-echo "⏰ Setting up stats sync cron job..."
-(crontab -l 2>/dev/null || true; echo "* * * * * cd /app && sudo -u root python manage.py fast_sync_stats --quiet >/dev/null 2>&1") | crontab -
-service cron start || true
 
-# Run initial stats sync as root
-echo "📊 Running initial stats synchronization..."
-sudo -u root python manage.py fast_sync_stats --quiet || true
-
-# Start background stats sync process (configurable interval) - run as root
-SYNC_INTERVAL=${SYNC_INTERVAL:-1}
-echo "🔄 Starting background stats sync process (every ${SYNC_INTERVAL} seconds)..."
-(
-    while true; do
-        sleep $SYNC_INTERVAL
-        sudo -u root python manage.py fast_sync_stats --quiet >/dev/null 2>&1 || true
-    done
-) &
+# Start celery worker and beat in background
+echo "🚦 Starting Celery worker and beat..."
+celery -A wireguard_manager worker --loglevel=info &
+celery -A wireguard_manager beat --loglevel=info &
 
 # Start server
-echo "🚀 Starting Django development server..."
-echo "📍 Admin panel: http://localhost/admin"
-echo "👤 Login: ${ADMIN_USERNAME:-admin} / ${ADMIN_PASSWORD:-admin123}"
-echo "🌐 Create WireGuard networks through Locations panel"
-echo "========================="
-
-exec python manage.py runserver 0.0.0.0:8000
+DEBUG_LOWER=$(echo "${DEBUG:-False}" | tr '[:upper:]' '[:lower:]')
+if [ "$DEBUG_LOWER" = "true" ]; then
+    echo "🚀 Starting Django development server (DEBUG=True)..."
+    echo "📍 Admin panel: http://localhost/admin"
+    echo "👤 Login: ${ADMIN_USERNAME:-admin} / ${ADMIN_PASSWORD:-admin123}"
+    echo "🌐 Create WireGuard networks through Locations panel"
+    echo "========================="
+    exec python manage.py runserver 0.0.0.0:8000
+else
+    echo "🚀 Starting Gunicorn (production)..."
+    # Sensible defaults; can be overridden via env
+    WORKERS=${GUNICORN_WORKERS:-3}
+    TIMEOUT=${GUNICORN_TIMEOUT:-60}
+    BIND=${GUNICORN_BIND:-0.0.0.0:8000}
+    ACCESS_LOG=${GUNICORN_ACCESS_LOG:--}
+    ERROR_LOG=${GUNICORN_ERROR_LOG:--}
+    exec gunicorn \
+        --workers "$WORKERS" \
+        --timeout "$TIMEOUT" \
+        --bind "$BIND" \
+        --access-logfile "$ACCESS_LOG" \
+        --error-logfile "$ERROR_LOG" \
+        wireguard_manager.wsgi:application
+fi

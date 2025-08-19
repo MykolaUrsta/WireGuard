@@ -1,3 +1,11 @@
+"""
+NOTE: This module contains an alternative implementation of locations/devices UI.
+It is currently NOT used — the project URLs are wired to wireguard_management.views
+and the separate `locations` app. We keep this file for reference, but it's not
+loaded by Django routing. If you plan to switch to this UI, wire it in urls.py
+and ensure corresponding templates exist.
+"""
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages

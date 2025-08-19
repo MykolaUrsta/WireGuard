@@ -48,9 +48,10 @@ services:
       - redis
     networks:
       - wireguard_network
+    user: "0:0"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/", "-o", "/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 3

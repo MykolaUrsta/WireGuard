@@ -554,12 +554,10 @@ class Device(models.Model):
         """Чи пристрій онлайн (на основі last_handshake як часу підключення)"""
         if self.status != 'active':
             return False
-            
         # last_handshake показує час підключення
         # Якщо немає трафіку протягом 1 хвилини - пристрій вважається відключеним
         if not self.last_handshake:
             return False
-            
         from django.utils import timezone
         # Перевіряємо, чи був трафік протягом останньої 1 хвилини
         time_since_handshake = (timezone.now() - self.last_handshake).total_seconds()
@@ -576,16 +574,9 @@ class Device(models.Model):
         return self.bytes_sent + self.bytes_received
     
     def update_traffic(self, bytes_sent, bytes_received):
-        """Оновлює трафік та час підключення (last_handshake)"""
-        old_total = self.traffic_total
+        """Оновлює трафік. last_handshake та connected_at оновлюються тільки в celery тасці."""
         self.bytes_sent = bytes_sent
         self.bytes_received = bytes_received
-        new_total = self.traffic_total
-        
-        # Якщо трафік змінився, оновлюємо last_handshake як час активного підключення
-        if new_total != old_total:
-            from django.utils import timezone
-            self.last_handshake = timezone.now()
     
     def get_connection_time_formatted(self):
         """Повертає відформатований час підключення на основі last_handshake"""

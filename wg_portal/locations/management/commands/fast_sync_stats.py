@@ -57,9 +57,13 @@ class Command(BaseCommand):
                     if device.public_key in devices_data:
                         data = devices_data[device.public_key]
                         if data['last_handshake']:
-                            device.last_handshake = timezone.make_aware(
+                            new_handshake = timezone.make_aware(
                                 datetime.datetime.fromtimestamp(data['last_handshake'])
                             )
+                            # Якщо пристрій був offline і став online — оновлюємо connected_at
+                            if not device.is_online:
+                                device.connected_at = new_handshake
+                            device.last_handshake = new_handshake
                         device.bytes_received = data['bytes_received']
                         device.bytes_sent = data['bytes_sent']
                         device.endpoint = data['endpoint']

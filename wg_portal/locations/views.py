@@ -740,14 +740,32 @@ def api_location_stats(request, pk):
     ).values('user').distinct().count()
     
     # Інформація про кожен пристрій
+    from django.template.defaultfilters import filesizeformat
     devices_info = []
     for device in devices:
+        # connection_time: скільки часу підключений (від connected_at, якщо онлайн)
+        if device.is_online and device.connected_at:
+            from django.utils import timezone
+            duration = int((timezone.now() - device.connected_at).total_seconds())
+            hours = duration // 3600
+            minutes = (duration % 3600) // 60
+            seconds = duration % 60
+            if hours > 0:
+                connection_time = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            else:
+                connection_time = f"{minutes:02d}:{seconds:02d}"
+        else:
+            connection_time = None
+
         devices_info.append({
             'id': device.id,
             'is_online': device.is_online,
-            'connection_time': device.get_connection_time_formatted() if device.is_online else None,
+            'connected_at': device.connected_at.isoformat() if device.connected_at else None,
+            'connection_time': connection_time,
             'bytes_received': device.bytes_received,
             'bytes_sent': device.bytes_sent,
+            'bytes_received_human': filesizeformat(device.bytes_received),
+            'bytes_sent_human': filesizeformat(device.bytes_sent),
         })
     
     data = {

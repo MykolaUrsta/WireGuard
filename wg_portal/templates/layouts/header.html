@@ -25,17 +25,22 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    {# TODO: Re-enable when wireguard_management Networks/Devices templates exist #}
+                    <!--
                     <a href="{% url 'wireguard:networks' %}" class="nav-link {% if 'wireguard' in request.resolver_match.namespace %}active{% endif %}">
                         <i class="fas fa-network-wired"></i>
                         <span>Networks</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{% url 'wireguard:devices' %}" class="nav-link">
-                            <i class="fas fa-laptop"></i>
-                            <span>Devices</span>
-                        </a>
-                    </li>
+                    </a>
+                    -->
+                </li>
+                <!--
+                <li class="nav-item">
+                    <a href="{% url 'wireguard:devices' %}" class="nav-link">
+                        <i class="fas fa-laptop"></i>
+                        <span>Devices</span>
+                    </a>
+                </li>
+                -->
                     {% if user.is_staff %}
                     <li class="nav-item">
                         <a href="/admin/" class="nav-link" target="_blank">

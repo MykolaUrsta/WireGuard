@@ -3,46 +3,11 @@
 
 {% block content %}
 <div class="container-fluid py-4">
-    <!-- Навігація між локаціями -->
-    {% if all_locations|length > 1 %}
-    <div class="mb-3">
-        <nav aria-label="Навігація по локаціях">
-            <div class="d-flex align-items-center">
-                <span class="text-muted me-3">Локації:</span>
-                {% for loc in all_locations %}
-                    {% if loc.pk == location.pk %}
-                        <span class="badge bg-primary me-2">{{ loc.name }}</span>
-                    {% else %}
-                        <a href="{% url 'locations:detail' loc.pk %}" class="btn btn-outline-primary btn-sm me-2">{{ loc.name }}</a>
-                    {% endif %}
-                {% endfor %}
-                <a href="{% url 'locations:actual_list' %}" class="btn btn-outline-secondary btn-sm ms-auto">
-                    <i class="bi bi-list"></i> Всі локації
-                </a>
-            </div>
-        </nav>
-    </div>
-    {% endif %}
-
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="fw-bold">Огляд локації: {{ location.name }}</h2>
-            <small class="text-muted">
-                <i class="bi bi-circle-fill text-success me-1" id="liveIndicator"></i>
-                <span id="liveStatus">Live updates активні</span>
-            </small>
-        </div>
-        <div>
-            <button id="refreshStatsBtn" class="btn btn-outline-secondary me-2" title="Оновити статистики">
-                <i class="bi bi-arrow-clockwise"></i> Оновити
-            </button>
-            <a href="{% url 'locations:edit' location.pk %}" class="btn btn-outline-primary me-2">
-                <i class="bi bi-pencil"></i> Редагувати локацію
-            </a>
-            <a href="{% url 'locations:create' %}" class="btn btn-primary">
-                <i class="bi bi-plus"></i> Додати локацію
-            </a>
-        </div>
+        <h2 class="fw-bold">Огляд локації: {{ location.name }}</h2>
+        <a href="{% url 'locations:edit' location.pk %}" class="btn btn-outline-primary">
+            <i class="bi bi-gear"></i> Налаштування локації
+        </a>
     </div>
     <div class="row mb-4">
         <div class="col-md-2">
@@ -50,7 +15,8 @@
                 <div class="card-body">
                     <div class="mb-2"><i class="bi bi-person fs-2"></i></div>
                     <div class="fw-bold">Активних користувачів зараз</div>
-                    <div class="fs-4 online-devices-counter">{{ online_devices }}</div>
+                    <div class="fs-4 online-users-counter">0</div>
+                    <div class="small text-muted">Всього пристроїв: <span class="total-user-devices">0</span></div>
                 </div>
             </div>
         </div>
@@ -59,7 +25,8 @@
                 <div class="card-body">
                     <div class="mb-2"><i class="bi bi-laptop fs-2"></i></div>
                     <div class="fw-bold">Активних пристроїв зараз</div>
-                    <div class="fs-4 online-devices-counter">{{ online_devices }}</div>
+                    <div class="fs-4 online-devices-counter">0</div>
+                    <div class="small text-muted">Всього: <span class="total-devices">0</span></div>
                 </div>
             </div>
         </div>
@@ -68,7 +35,7 @@
                 <div class="card-body">
                     <div class="mb-2"><i class="bi bi-person fs-2"></i></div>
                     <div class="fw-bold">Користувачів за 1 год</div>
-                    <div class="fs-4 users-last-hour-counter">{{ users_last_hour }}</div>
+                    <div class="fs-4 users-last-hour-counter">0</div>
                 </div>
             </div>
         </div>
@@ -77,7 +44,7 @@
                 <div class="card-body">
                     <div class="mb-2"><i class="bi bi-laptop fs-2"></i></div>
                     <div class="fw-bold">Пристроїв за 1 год</div>
-                    <div class="fs-4 devices-last-hour-counter">{{ devices_last_hour }}</div>
+                    <div class="fs-4 devices-last-hour-counter">0</div>
                 </div>
             </div>
         </div>
@@ -86,309 +53,185 @@
                 <div class="card-body">
                     <div class="fw-bold">Всього передано:</div>
                     <div class="d-flex justify-content-center align-items-center">
-                        <span class="text-primary me-2">In: {{ total_bytes_received|filesizeformat }}</span>
-                        <span class="text-danger">Out: {{ total_bytes_sent|filesizeformat }}</span>
+                        <span class="text-primary me-2">In: <span class="total-bytes-received">0 B</span></span>
+                        <span class="text-danger">Out: <span class="total-bytes-sent">0 B</span></span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="row mb-4">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-body">
-                    <div class="fw-bold mb-2">Активність за 1 год</div>
-                    <canvas id="activityChart" height="80"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body">
-                    <div class="fw-bold mb-2">Всього передано:</div>
-                    <div class="d-flex justify-content-between">
-                        <span class="text-primary">{{ total_bytes_received|filesizeformat }}</span>
-                        <span class="text-danger">{{ total_bytes_sent|filesizeformat }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="mb-4">
+    <div id="online-users-section" class="mb-4" style="display:none;">
         <h4>Підключені користувачі</h4>
-        <div class="row">
-            {% for device in location.devices.all %}
-            <div class="col-md-6 mb-3">
-                <div class="card">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="me-3">
-                            <div class="avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width:48px;height:48px;font-size:1.5rem;">
-                                {{ device.user.username|slice:":2"|upper }}
-                            </div>
-                        </div>
-                        <div class="flex-grow-1">
-                            <div class="fw-bold">{{ device.user.get_full_name|default:device.user.username }}</div>
-                            <div class="text-muted small">{{ device.public_key }}</div>
-                            <div class="text-muted small">Пристрій: {{ device.name }}</div>
-                            <div class="d-flex align-items-center mt-2">
-                                <span class="text-primary me-3">Отримано: {{ device.bytes_received|filesizeformat }}</span>
-                                <span class="text-danger">Відправлено: {{ device.bytes_sent|filesizeformat }}</span>
-                            </div>
-                            <div class="mt-2">
-                                <canvas id="peerChart-{{ device.id }}" height="40"></canvas>
-                            </div>
-                        </div>
-                        <div class="ms-3 text-end">
-                            {% if device.is_online %}
-                                <div class="text-success small">
-                                    <i class="bi bi-circle-fill"></i> Підключено
-                                </div>
-                                <div class="text-muted small" id="connection-time-{{ device.id }}">{{ device.get_connection_time_formatted }}</div>
-                            {% else %}
-                                <div class="text-danger small">
-                                    <i class="bi bi-circle"></i> Відключено
-                                </div>
-                                {% if device.last_handshake %}
-                                    <div class="text-muted small">{{ device.last_handshake|timesince }} тому</div>
-                                {% else %}
-                                    <div class="text-muted small">Ніколи не підключався</div>
-                                {% endif %}
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
+        <div class="row align-items-stretch" id="online-users-list" style="min-height: 200px;">
+            <!-- Динамічно вставляються онлайн-користувачі -->
+        </div>
+        <div id="no-online-users" class="text-center text-muted py-5" style="display:none; font-size: 1.2rem;">Немає підключень</div>
+    </div>
+    <div id="online-users-section" class="mb-4" style="display:none;">
+        <h4>Підключені користувачі</h4>
+        <div class="row" id="online-users-list">
+            <!-- Динамічно вставляються онлайн-користувачі -->
         </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const ctx = document.getElementById('activityChart').getContext('2d');
-const locationId = "{{ location.id }}";
-fetch(`/locations/api/location-history/${locationId}/?from=` + encodeURIComponent(new Date(Date.now()-60*60*1000).toISOString()))
-  .then(r => r.json())
-  .then(res => {
-    const labels = res.history.map(h => (new Date(h.timestamp)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-    const inData = res.history.map(h => h.bytes_received/1024/1024);
-    const outData = res.history.map(h => h.bytes_sent/1024/1024);
-    new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: 'Отримано',
-            data: inData,
-            backgroundColor: 'rgba(54, 162, 235, 0.5)'
-          },
-          {
-            label: 'Відправлено',
-            data: outData,
-            backgroundColor: 'rgba(255, 99, 132, 0.5)'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false }
-        },
-        scales: {
-          x: { display: true },
-          y: { display: true }
-        }
-      }
-    });
-  });
-</script>
-<script>
-// Для кожного пристрою будуємо графік активності
-{% for device in location.devices.all %}
-fetch(`/locations/api/peer-history/{{ device.id }}/?from=` + encodeURIComponent(new Date(Date.now()-60*60*1000).toISOString()))
-  .then(function(r) { return r.json(); })
-  .then(function(res) {
-    var labels = res.history.map(function(h) { return (new Date(h.timestamp)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); });
-    var inData = res.history.map(function(h) { return h.bytes_received/1024/1024; });
-    var outData = res.history.map(function(h) { return h.bytes_sent/1024/1024; });
-    var ctx = document.getElementById('peerChart-{{ device.id }}').getContext('2d');
-    new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: 'In',
-            data: inData,
-            backgroundColor: 'rgba(54, 162, 235, 0.5)'
-          },
-          {
-            label: 'Out',
-            data: outData,
-            backgroundColor: 'rgba(255, 99, 132, 0.5)'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false }
-        },
-        scales: {
-          x: { display: false },
-          y: { display: false }
-        }
-      }
-    });
-  });
-{% endfor %}
+// let activityChart = null; // видалено глобальний графік
+let peerCharts = {};
 
-// Функція для оновлення статистики локації
+function renderOnlineUsers(devices) {
+    const container = document.getElementById('online-users-list');
+    container.innerHTML = '';
+    let anyOnline = false;
+    devices.forEach(device => {
+        if (!device.is_online) return;
+        anyOnline = true;
+        // Fallbacks for user info (may be missing in API)
+        let username = (device.user && device.user.username) ? device.user.username : (device.username || '');
+        let fullName = (device.user && device.user.full_name) ? device.user.full_name : (device.full_name || username);
+        let avatar = username ? username.slice(0,2).toUpperCase() : '?';
+        const card = document.createElement('div');
+        card.className = 'col-md-6 mb-3 d-flex align-items-stretch';
+        card.innerHTML = `
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center h-100">
+                    <div class="me-3">
+                        <div class="avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width:48px;height:48px;font-size:1.5rem;">
+                            ${avatar}
+                        </div>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-bold">${fullName}</div>
+                        <div class="text-muted small">${device.public_key || ''}</div>
+                        <div class="text-muted small">Пристрій: ${device.name || ''}</div>
+                        <div class="d-flex align-items-center mt-2">
+                            <span class="text-primary me-3" id="bytes-received-${device.id}">Отримано: ${device.bytes_sent_human || '0 B'}</span>
+                            <span class="text-danger" id="bytes-sent-${device.id}">Відправлено: ${device.bytes_received_human || '0 B'}</span>
+                        </div>
+                        <div class="mt-2">
+                            <canvas id="peerChart-${device.id}" height="40"></canvas>
+                        </div>
+                    </div>
+                    <div class="ms-3 text-end">
+                        <div class="connection-status" id="connection-status-${device.id}">
+                            <span class="text-success small"><i class="bi bi-circle-fill"></i> Підключено</span>
+                        </div>
+                        <div class="text-muted small" id="connection-time-${device.id}"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+    document.getElementById('online-users-section').style.display = anyOnline ? '' : 'none';
+    document.getElementById('no-online-users').style.display = anyOnline ? 'none' : '';
+}
+
+
+function updatePeerCharts(devices) {
+    devices.forEach(device => {
+        if (!device.is_online) return;
+        fetch(`/locations/api/peer-history/${device.id}/?from=` + encodeURIComponent(new Date(Date.now()-60*60*1000).toISOString()))
+            .then(r => r.json())
+            .then(res => {
+                const labels = res.history.map(h => (new Date(h.timestamp)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                const outData = res.history.map(h => h.bytes_received/1024/1024);
+                const inData = res.history.map(h => h.bytes_sent/1024/1024);
+                const ctx = document.getElementById(`peerChart-${device.id}`).getContext('2d');
+                if (!peerCharts[device.id]) {
+                    peerCharts[device.id] = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Відправлено',
+                                    data: outData,
+                                    borderColor: 'rgba(255, 99, 132, 1)',
+                                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                    fill: false,
+                                    tension: 0.2
+                                },
+                                {
+                                    label: 'Отримано',
+                                    data: inData,
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                    fill: false,
+                                    tension: 0.2
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: true } },
+                            scales: { x: { display: true }, y: { display: true } }
+                        }
+                    });
+                } else {
+                    peerCharts[device.id].data.labels = labels;
+                    peerCharts[device.id].data.datasets[0].data = outData;
+                    peerCharts[device.id].data.datasets[1].data = inData;
+                    peerCharts[device.id].update();
+                }
+            });
+    });
+}
+
 function updateLocationStats() {
     fetch(`/locations/api/location-stats/{{ location.id }}/`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
-            // Оновлюємо лічильники
-            document.querySelectorAll('.online-devices-counter').forEach(el => {
-                el.textContent = data.online_devices;
-            });
-            document.querySelectorAll('.users-last-hour-counter').forEach(el => {
-                el.textContent = data.users_last_hour;
-            });
-            document.querySelectorAll('.devices-last-hour-counter').forEach(el => {
-                el.textContent = data.devices_last_hour;
-            });
-            
-            // Оновлюємо час підключення для кожного пристрою
+            // counters
+            document.querySelector('.online-users-counter').textContent = data.online_users || data.online_devices || 0;
+            document.querySelector('.online-devices-counter').textContent = data.online_devices || 0;
+            document.querySelector('.users-last-hour-counter').textContent = data.users_last_hour || 0;
+            document.querySelector('.devices-last-hour-counter').textContent = data.devices_last_hour || 0;
+            document.querySelectorAll('.total-bytes-received').forEach(el => el.textContent = data.total_bytes_received_human || '0 B');
+            document.querySelectorAll('.total-bytes-sent').forEach(el => el.textContent = data.total_bytes_sent_human || '0 B');
+            document.querySelector('.total-user-devices').textContent = data.total_user_devices || 0;
+            document.querySelector('.total-devices').textContent = data.total_devices || 0;
+
+            // online users/devices
             if (data.devices) {
+                renderOnlineUsers(data.devices);
+                updatePeerCharts(data.devices);
+                // Таймери підключення та live bytes update
                 data.devices.forEach(device => {
+                    if (!device.is_online) return;
+                    // Update bytes live (поміняти місцями)
+                    const sent = document.getElementById(`bytes-sent-${device.id}`);
+                    const recv = document.getElementById(`bytes-received-${device.id}`);
+                    if (sent) sent.textContent = `Відправлено: ${device.bytes_received_human || '0 B'}`;
+                    if (recv) recv.textContent = `Отримано: ${device.bytes_sent_human || '0 B'}`;
+                    // Connection timer
                     const timeElement = document.getElementById(`connection-time-${device.id}`);
-                    if (timeElement && device.is_online && device.connection_time) {
-                        timeElement.textContent = device.connection_time;
-                    }
-                    
-                    // Оновлюємо статус підключення
-                    const deviceElement = document.querySelector(`[data-device-id="${device.id}"]`);
-                    if (deviceElement) {
-                        const statusElement = deviceElement.querySelector('.connection-status');
-                        if (statusElement) {
-                            if (device.is_online) {
-                                statusElement.innerHTML = '<i class="bi bi-circle-fill text-success"></i> Підключено';
-                            } else {
-                                statusElement.innerHTML = '<i class="bi bi-circle text-danger"></i> Відключено';
+                    if (timeElement && device.connected_at) {
+                        if (!timeElement.dataset.timerStarted || timeElement.dataset.timerStarted !== device.connected_at) {
+                            timeElement.dataset.timerStarted = device.connected_at;
+                            if (timeElement._interval) clearInterval(timeElement._interval);
+                            let start = new Date(device.connected_at);
+                            function updateTimer() {
+                                let now = new Date();
+                                let diff = Math.floor((now - start) / 1000);
+                                let h = Math.floor(diff / 3600);
+                                let m = Math.floor((diff % 3600) / 60);
+                                let s = diff % 60;
+                                timeElement.textContent = h > 0 ? `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
                             }
+                            updateTimer();
+                            timeElement._interval = setInterval(updateTimer, 1000);
                         }
                     }
                 });
             }
-            
-            // Показуємо індикатор успішного оновлення
-            updateLiveIndicator(true);
-        })
-        .catch(error => {
-            console.error('Помилка оновлення статистики:', error);
-            updateLiveIndicator(false);
         });
 }
 
-// Функція для оновлення індикатора live статусу
-function updateLiveIndicator(success) {
-    const indicator = document.getElementById('liveIndicator');
-    const status = document.getElementById('liveStatus');
-    
-    if (success) {
-        indicator.className = 'bi bi-circle-fill text-success me-1';
-        status.textContent = 'Live updates активні';
-    } else {
-        indicator.className = 'bi bi-circle-fill text-danger me-1';
-        status.textContent = 'Помилка оновлення';
-    }
-}
 
-// Функція для показу індикатора оновлення
-function showUpdateIndicator() {
-    const indicator = document.createElement('div');
-    indicator.className = 'position-fixed top-0 end-0 m-3 alert alert-success alert-dismissible fade show';
-    indicator.style.zIndex = '9999';
-    indicator.innerHTML = `
-        <small><i class="bi bi-check-circle"></i> Дані оновлено</small>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    document.body.appendChild(indicator);
-    
-    // Автоматично видаляємо через 2 секунди
-    setTimeout(() => {
-        if (indicator.parentNode) {
-            indicator.remove();
-        }
-    }, 2000);
-}
-
-// Функція для показу індикатора помилки
-function showErrorIndicator() {
-    const indicator = document.createElement('div');
-    indicator.className = 'position-fixed top-0 end-0 m-3 alert alert-warning alert-dismissible fade show';
-    indicator.style.zIndex = '9999';
-    indicator.innerHTML = `
-        <small><i class="bi bi-exclamation-triangle"></i> Помилка оновлення</small>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    document.body.appendChild(indicator);
-    
-    setTimeout(() => {
-        if (indicator.parentNode) {
-            indicator.remove();
-        }
-    }, 3000);
-}
-
-// Обробник кнопки ручного оновлення
-document.getElementById('refreshStatsBtn').addEventListener('click', async function() {
-    const btn = this;
-    const originalText = btn.innerHTML;
-    
-    try {
-        // Показуємо індикатор завантаження
-        btn.innerHTML = '<i class="bi bi-arrow-clockwise spinner-border spinner-border-sm"></i> Оновлення...';
-        btn.disabled = true;
-        
-        // Викликаємо API для оновлення статистик
-        const response = await fetch(`/locations/api/refresh-stats/{{ location.pk }}/`);
-        const result = await response.json();
-        
-        if (result.success) {
-            // Показуємо повідомлення про успіх
-            showToast('Статистики оновлені', `Оновлено ${result.updated_devices} пристроїв`, 'success');
-            // Оновлюємо дані на сторінці
-            updateLocationStats();
-        } else {
-            showToast('Помилка', result.error || 'Не вдалося оновити статистики', 'error');
-        }
-    } catch (error) {
-        showToast('Помилка', 'Помилка з\'єднання', 'error');
-    } finally {
-        // Повертаємо початковий вигляд кнопки
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }
-});
-
-// Функція для показу toast повідомлень
-function showToast(title, message, type = 'info') {
-    // Простий alert поки що, можна замінити на toast
-    alert(`${title}: ${message}`);
-}
-
-// Оновлюємо статистику кожну секунду
 setInterval(updateLocationStats, 1000);
 
-// Початкове оновлення одразу після завантаження
 document.addEventListener('DOMContentLoaded', function() {
     updateLocationStats();
 });

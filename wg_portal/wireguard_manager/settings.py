@@ -130,12 +130,13 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = 'uk'
-TIME_ZONE = 'Europe/Uzhgorod'
+TIME_ZONE = 'Europe/Kyiv'
 USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/assets/'
+# Where collectstatic puts files; served by nginx from the shared volume
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [
     BASE_DIR / 'assets',
@@ -153,6 +154,28 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 
+# Celery settings (must be after REDIS_URL definition)
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_BEAT_SCHEDULE = {
+    'fast-sync-stats-every-second': {
+        'task': 'locations.tasks.fast_sync_stats_task',
+        'schedule': 1.0,
+    },
+    'save-peer-stats-every-5-minutes': {
+        'task': 'locations.tasks.save_peer_stats_task',
+        'schedule': 300.0,
+    },
+}
+
+# Security: behind reverse proxy
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+
 # Logging
 LOGGING = {
     'version': 1,
@@ -167,7 +190,8 @@ LOGGING = {
         'file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'django.log',
+            # Use shared logs volume mounted at /app/logs in Docker
+            'filename': Path(os.environ.get('LOG_DIR', '/app/logs')) / 'django.log',
             'formatter': 'verbose',
         },
         'console': {

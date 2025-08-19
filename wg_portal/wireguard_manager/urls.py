@@ -18,7 +18,8 @@ urlpatterns = [
     path('accounts/', include('accounts.urls')),
     path('wireguard/', include('wireguard_management.urls', namespace='wireguard')),
     path('locations/', include('locations.urls')),
-    path('logs/', include('audit_logging.urls')),
+    # NOTE: audit_logging UI templates are not present; disable routes for now.
+    # path('logs/', include('audit_logging.urls')),
     path('health/', health_check, name='health'),
     path('', redirect_to_login),  # Redirect to login or dashboard
 ]
