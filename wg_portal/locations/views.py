@@ -757,6 +757,15 @@ def api_location_stats(request, pk):
         else:
             connection_time = None
 
+        # Додаємо user-інформацію для фронта
+        user_info = None
+        if device.user:
+            user_info = {
+                'id': device.user.id,
+                'username': device.user.username,
+                'full_name': getattr(device.user, 'get_full_name', lambda: None)() or device.user.username
+            }
+
         devices_info.append({
             'id': device.id,
             'is_online': device.is_online,
@@ -766,6 +775,10 @@ def api_location_stats(request, pk):
             'bytes_sent': device.bytes_sent,
             'bytes_received_human': filesizeformat(device.bytes_received),
             'bytes_sent_human': filesizeformat(device.bytes_sent),
+            'user': user_info,
+            'name': device.name,
+            'public_key': device.public_key,
+            'device_name': device.name,
         })
     
     data = {

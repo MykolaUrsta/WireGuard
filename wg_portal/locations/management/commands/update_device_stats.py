@@ -74,7 +74,8 @@ class Command(BaseCommand):
                         
                         # Оновлюємо трафік
                         old_total = device.traffic_total
-                        device.update_traffic(bytes_sent, bytes_received)
+                        # Передаємо bytes_sent, bytes_received, last_handshake
+                        device.update_traffic(bytes_sent, bytes_received, handshake_time=timezone.datetime.fromtimestamp(last_handshake_timestamp, tz=timezone.get_current_timezone()) if last_handshake_timestamp else None)
                         
                         # Оновлюємо last_handshake якщо є timestamp
                         if last_handshake_timestamp:

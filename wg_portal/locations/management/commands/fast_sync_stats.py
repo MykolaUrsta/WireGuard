@@ -64,6 +64,10 @@ class Command(BaseCommand):
                             if not device.is_online:
                                 device.connected_at = new_handshake
                             device.last_handshake = new_handshake
+                        # Оновлюємо онлайн-статус через last_bytes_sent/last_bytes_update
+                        if device.bytes_sent != data['bytes_sent']:
+                            device.last_bytes_sent = device.bytes_sent
+                            device.last_bytes_update = timezone.now()
                         device.bytes_received = data['bytes_received']
                         device.bytes_sent = data['bytes_sent']
                         device.endpoint = data['endpoint']

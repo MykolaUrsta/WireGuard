@@ -11,74 +11,72 @@
     </div>
     <div class="row mb-4">
         <div class="col-md-2">
-            <div class="card text-center">
+            <div class="card text-center h-100">
                 <div class="card-body">
-                    <div class="mb-2"><i class="bi bi-person fs-2"></i></div>
                     <div class="fw-bold">Активних користувачів зараз</div>
                     <div class="fs-4 online-users-counter">0</div>
-                    <div class="small text-muted">Всього пристроїв: <span class="total-user-devices">0</span></div>
+                    <div class="small text-muted">Всього користувачів: <span class="total-users">0</span></div>
                 </div>
             </div>
         </div>
         <div class="col-md-2">
-            <div class="card text-center">
+            <div class="card text-center h-100">
                 <div class="card-body">
-                    <div class="mb-2"><i class="bi bi-laptop fs-2"></i></div>
                     <div class="fw-bold">Активних пристроїв зараз</div>
                     <div class="fs-4 online-devices-counter">0</div>
-                    <div class="small text-muted">Всього: <span class="total-devices">0</span></div>
+                    <div class="small text-muted">Всього пристроїв: <span class="total-devices">0</span></div>
                 </div>
             </div>
         </div>
         <div class="col-md-2">
-            <div class="card text-center">
+            <div class="card text-center h-100">
                 <div class="card-body">
-                    <div class="mb-2"><i class="bi bi-person fs-2"></i></div>
                     <div class="fw-bold">Користувачів за 1 год</div>
                     <div class="fs-4 users-last-hour-counter">0</div>
                 </div>
             </div>
         </div>
         <div class="col-md-2">
-            <div class="card text-center">
+            <div class="card text-center h-100">
                 <div class="card-body">
-                    <div class="mb-2"><i class="bi bi-laptop fs-2"></i></div>
                     <div class="fw-bold">Пристроїв за 1 год</div>
                     <div class="fs-4 devices-last-hour-counter">0</div>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card text-center">
+            <div class="card text-center h-100">
                 <div class="card-body">
                     <div class="fw-bold">Всього передано:</div>
                     <div class="d-flex justify-content-center align-items-center">
-                        <span class="text-primary me-2">In: <span class="total-bytes-received">0 B</span></span>
-                        <span class="text-danger">Out: <span class="total-bytes-sent">0 B</span></span>
+                        <span class="text-primary me-2">Отримано: <span id="total-bytes-received">0 B</span></span>
+                        <span class="text-danger">Відправлено: <span id="total-bytes-sent">0 B</span></span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
     <div id="online-users-section" class="mb-4" style="display:none;">
         <h4>Підключені користувачі</h4>
-        <div class="row align-items-stretch" id="online-users-list" style="min-height: 200px;">
-            <!-- Динамічно вставляються онлайн-користувачі -->
-        </div>
-        <div id="no-online-users" class="text-center text-muted py-5" style="display:none; font-size: 1.2rem;">Немає підключень</div>
+        <div class="row" id="online-users-list"></div>
     </div>
-    <div id="online-users-section" class="mb-4" style="display:none;">
-        <h4>Підключені користувачі</h4>
-        <div class="row" id="online-users-list">
-            <!-- Динамічно вставляються онлайн-користувачі -->
-        </div>
+    <div id="no-online-users" class="text-center text-muted py-5" style="font-size:1.3rem;display:none;">
+        Немає підключень
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// let activityChart = null; // видалено глобальний графік
+var deviceBaseStats = {};
 let peerCharts = {};
+
+function formatBytes(bytes) {
+    if (isNaN(bytes) || bytes < 0) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    let k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
 function renderOnlineUsers(devices) {
     const container = document.getElementById('online-users-list');
@@ -87,34 +85,25 @@ function renderOnlineUsers(devices) {
     devices.forEach(device => {
         if (!device.is_online) return;
         anyOnline = true;
-        // Fallbacks for user info (may be missing in API)
-        let username = (device.user && device.user.username) ? device.user.username : (device.username || '');
-        let fullName = (device.user && device.user.full_name) ? device.user.full_name : (device.full_name || username);
-        let avatar = username ? username.slice(0,2).toUpperCase() : '?';
+        // Відображаємо ім'я користувача, який підключений, та яким пристроєм
+        let username = (device.user && device.user.full_name) || (device.user && device.user.username) || device.username || '';
+        let deviceName = device.device_name || device.name || '';
         const card = document.createElement('div');
         card.className = 'col-md-6 mb-3 d-flex align-items-stretch';
         card.innerHTML = `
             <div class="card h-100">
-                <div class="card-body d-flex align-items-center h-100">
-                    <div class="me-3">
-                        <div class="avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width:48px;height:48px;font-size:1.5rem;">
-                            ${avatar}
-                        </div>
-                    </div>
+                <div class="card-body d-flex align-items-center h-100 p-3">
                     <div class="flex-grow-1">
-                        <div class="fw-bold">${fullName}</div>
-                        <div class="text-muted small">${device.public_key || ''}</div>
-                        <div class="text-muted small">Пристрій: ${device.name || ''}</div>
-                        <div class="d-flex align-items-center mt-2">
-                            <span class="text-primary me-3" id="bytes-received-${device.id}">Отримано: ${device.bytes_sent_human || '0 B'}</span>
-                            <span class="text-danger" id="bytes-sent-${device.id}">Відправлено: ${device.bytes_received_human || '0 B'}</span>
-                        </div>
-                        <div class="mt-2">
-                            <canvas id="peerChart-${device.id}" height="40"></canvas>
+                        <div class="mb-1" style="font-size:1.1rem;">Користувач: <span>${username}</span></div>
+                        <div class="text-muted mb-1" style="font-size:0.95rem;">Пристрій: <span>${deviceName}</span></div>
+                        <div class="text-muted mb-2" style="font-size:0.85rem;">${device.public_key || ''}</div>
+                        <div class="d-flex align-items-center mb-2" style="font-size:0.98rem;">
+                            <span class="text-danger me-4" id="bytes-sent-${device.id}" style="font-weight:normal;font-size:0.98em;">Отримано: <span style="font-size:1em">0 B</span></span>
+                            <span class="text-primary" id="bytes-received-${device.id}" style="font-weight:normal;font-size:0.98em;">Відправлено: <span style="font-size:1em">0 B</span></span>
                         </div>
                     </div>
-                    <div class="ms-3 text-end">
-                        <div class="connection-status" id="connection-status-${device.id}">
+                    <div class="ms-3 text-end align-self-start">
+                        <div class="connection-status mb-1" id="connection-status-${device.id}">
                             <span class="text-success small"><i class="bi bi-circle-fill"></i> Підключено</span>
                         </div>
                         <div class="text-muted small" id="connection-time-${device.id}"></div>
@@ -128,56 +117,7 @@ function renderOnlineUsers(devices) {
     document.getElementById('no-online-users').style.display = anyOnline ? 'none' : '';
 }
 
-
-function updatePeerCharts(devices) {
-    devices.forEach(device => {
-        if (!device.is_online) return;
-        fetch(`/locations/api/peer-history/${device.id}/?from=` + encodeURIComponent(new Date(Date.now()-60*60*1000).toISOString()))
-            .then(r => r.json())
-            .then(res => {
-                const labels = res.history.map(h => (new Date(h.timestamp)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-                const outData = res.history.map(h => h.bytes_received/1024/1024);
-                const inData = res.history.map(h => h.bytes_sent/1024/1024);
-                const ctx = document.getElementById(`peerChart-${device.id}`).getContext('2d');
-                if (!peerCharts[device.id]) {
-                    peerCharts[device.id] = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [
-                                {
-                                    label: 'Відправлено',
-                                    data: outData,
-                                    borderColor: 'rgba(255, 99, 132, 1)',
-                                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                                    fill: false,
-                                    tension: 0.2
-                                },
-                                {
-                                    label: 'Отримано',
-                                    data: inData,
-                                    borderColor: 'rgba(54, 162, 235, 1)',
-                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                                    fill: false,
-                                    tension: 0.2
-                                }
-                            ]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: { legend: { display: true } },
-                            scales: { x: { display: true }, y: { display: true } }
-                        }
-                    });
-                } else {
-                    peerCharts[device.id].data.labels = labels;
-                    peerCharts[device.id].data.datasets[0].data = outData;
-                    peerCharts[device.id].data.datasets[1].data = inData;
-                    peerCharts[device.id].update();
-                }
-            });
-    });
-}
+// Графік видалено
 
 function updateLocationStats() {
     fetch(`/locations/api/location-stats/{{ location.id }}/`)
@@ -186,25 +126,60 @@ function updateLocationStats() {
             // counters
             document.querySelector('.online-users-counter').textContent = data.online_users || data.online_devices || 0;
             document.querySelector('.online-devices-counter').textContent = data.online_devices || 0;
-            document.querySelector('.users-last-hour-counter').textContent = data.users_last_hour || 0;
-            document.querySelector('.devices-last-hour-counter').textContent = data.devices_last_hour || 0;
-            document.querySelectorAll('.total-bytes-received').forEach(el => el.textContent = data.total_bytes_received_human || '0 B');
-            document.querySelectorAll('.total-bytes-sent').forEach(el => el.textContent = data.total_bytes_sent_human || '0 B');
-            document.querySelector('.total-user-devices').textContent = data.total_user_devices || 0;
-            document.querySelector('.total-devices').textContent = data.total_devices || 0;
+            document.querySelector('.users-last-hour-counter').textContent = (typeof data.users_last_hour === 'number' && data.users_last_hour > 0) ? data.users_last_hour : 0;
+            document.querySelector('.devices-last-hour-counter').textContent = (typeof data.devices_last_hour === 'number' && data.devices_last_hour > 0) ? data.devices_last_hour : 0;
+
+            // Всього користувачів (унікальних)
+            if ('total_users' in data) {
+                document.querySelector('.total-users').textContent = data.total_users;
+            } else if (data.devices) {
+                // fallback: підрахунок унікальних user.id
+                const userIds = new Set();
+                data.devices.forEach(d => {
+                    if (d.user && d.user.id) userIds.add(d.user.id);
+                });
+                document.querySelector('.total-users').textContent = userIds.size;
+            } else {
+                document.querySelector('.total-users').textContent = 0;
+            }
+
+            // Всього пристроїв
+            document.querySelector('.total-devices').textContent = ('total_devices' in data) ? data.total_devices : (data.devices ? data.devices.length : 0);
+
+            // Загальний трафік (human readable)
+            if ('total_bytes_received_human' in data && 'total_bytes_sent_human' in data) {
+                document.getElementById('total-bytes-received').textContent = data.total_bytes_received_human;
+                document.getElementById('total-bytes-sent').textContent = data.total_bytes_sent_human;
+            } else if (data.devices) {
+                // fallback: підрахунок вручну
+                let totalRecv = 0, totalSent = 0;
+                data.devices.forEach(d => {
+                    totalRecv += d.bytes_received || 0;
+                    totalSent += d.bytes_sent || 0;
+                });
+                document.getElementById('total-bytes-received').textContent = formatBytes(totalRecv);
+                document.getElementById('total-bytes-sent').textContent = formatBytes(totalSent);
+            } else {
+                document.getElementById('total-bytes-received').textContent = '0 B';
+                document.getElementById('total-bytes-sent').textContent = '0 B';
+            }
 
             // online users/devices
             if (data.devices) {
                 renderOnlineUsers(data.devices);
-                updatePeerCharts(data.devices);
                 // Таймери підключення та live bytes update
                 data.devices.forEach(device => {
-                    if (!device.is_online) return;
-                    // Update bytes live (поміняти місцями)
+                    // Для онлайн-пристрою показуємо трафік лише за поточну сесію (від momentу підключення)
+                    // Для цього зберігаємо базові значення трафіку при підключенні
+                    // Трафік сесії: bytes_sent - session_bytes_sent, bytes_received - session_bytes_received
+                    let sentNow = (device.bytes_sent || 0) - (device.session_bytes_sent || 0);
+                    let recvNow = (device.bytes_received || 0) - (device.session_bytes_received || 0);
+                    if (sentNow < 0) sentNow = 0;
+                    if (recvNow < 0) recvNow = 0;
                     const sent = document.getElementById(`bytes-sent-${device.id}`);
                     const recv = document.getElementById(`bytes-received-${device.id}`);
-                    if (sent) sent.textContent = `Відправлено: ${device.bytes_received_human || '0 B'}`;
-                    if (recv) recv.textContent = `Отримано: ${device.bytes_sent_human || '0 B'}`;
+                    if (sent) sent.textContent = `Отримано: ${formatBytes(sentNow)}`;
+                    if (recv) recv.textContent = `Відправлено: ${formatBytes(recvNow)}`;
                     // Connection timer
                     const timeElement = document.getElementById(`connection-time-${device.id}`);
                     if (timeElement && device.connected_at) {
@@ -218,7 +193,12 @@ function updateLocationStats() {
                                 let h = Math.floor(diff / 3600);
                                 let m = Math.floor((diff % 3600) / 60);
                                 let s = diff % 60;
-                                timeElement.textContent = h > 0 ? `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                                // Якщо пристрій онлайн — показуємо таймер, якщо офлайн — показуємо 00:00
+                                if (device.is_online) {
+                                    timeElement.textContent = h > 0 ? `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                                } else {
+                                    timeElement.textContent = '00:00';
+                                }
                             }
                             updateTimer();
                             timeElement._interval = setInterval(updateTimer, 1000);
@@ -229,9 +209,7 @@ function updateLocationStats() {
         });
 }
 
-
 setInterval(updateLocationStats, 1000);
-
 document.addEventListener('DOMContentLoaded', function() {
     updateLocationStats();
 });

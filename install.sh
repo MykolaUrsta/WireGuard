@@ -333,7 +333,19 @@ main() {
     
     check_root
     check_docker
-    
+
+    # Автоматично вмикаємо IP forwarding для NAT (тільки якщо є права)
+    if [ "$NO_SUDO" != "true" ] && [ "$EUID" -eq 0 ]; then
+        echo "🔧 Вмикаємо net.ipv4.ip_forward=1 для NAT..."
+        sysctl -w net.ipv4.ip_forward=1
+        if ! grep -q '^net.ipv4.ip_forward=1' /etc/sysctl.conf; then
+            echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+        fi
+        echo "✓ IP forwarding увімкнено"
+    else
+        echo "⚠️  Не root або --no-sudo: пропускаємо налаштування ip_forward (налаштуйте вручну, якщо потрібно)"
+    fi
+
     if [ "$MODE" = "update" ]; then
         # Режим швидкого оновлення
         quick_update
@@ -342,29 +354,29 @@ main() {
         echo "======================"
         return 0
     fi
-    
+
     if [ "$MODE" = "full" ]; then
         create_directories
     fi
-    
+
     stop_existing
-    
+
     if [ "$MODE" = "update" ]; then
         quick_update
     else
         build_and_start
     fi
-    
+
     echo ""
     echo "⏳ Очікуємо запуску сервісів (30 секунд)..."
     sleep 30
-    
+
     if [ "$MODE" = "full" ]; then
         setup_ssl
     fi
-    
+
     show_status
-    
+
     echo ""
     echo "🎉 Розгортання завершено!"
     echo "========================="
