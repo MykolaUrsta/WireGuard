@@ -602,16 +602,16 @@ class Device(models.Model):
     def get_config(self):
         """Генерує конфігурацію WireGuard для пристрою"""
         import ipaddress
-        
+
         # Отримуємо мережу та її параметри
         network = self.network
         if not network:
             return "# Error: No network assigned to device"
-        
+
         # Розрахунок маски підмережі
         network_ip = ipaddress.IPv4Network(network.subnet)
-        
-    config = f"""[Interface]
+
+        config = f"""[Interface]
 PrivateKey = {self.private_key if self.private_key else 'YOUR_PRIVATE_KEY'}
 Address = {self.ip_address}/32
 DNS = {network.dns_servers or '8.8.8.8, 8.8.4.4'}
