@@ -768,9 +768,9 @@ def device_delete(request, device_id):
         
         # Оновлюємо конфігурацію WireGuard
         try:
-            from locations.docker_manager import DockerManager
-            docker_manager = DockerManager()
-            docker_manager.update_wireguard_config(location)
+            from locations.docker_manager import WireGuardDockerManager
+            manager = WireGuardDockerManager()
+            manager.generate_server_config(location)
         except Exception as config_error:
             # Логуємо помилку, але не зупиняємо видалення
             import logging

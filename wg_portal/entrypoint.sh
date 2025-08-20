@@ -1,4 +1,5 @@
 #!/bin/bash
+umask 077
 
 set -e
 
@@ -79,9 +80,9 @@ fi
 
 
 # Start celery worker and beat in background
-echo "🚦 Starting Celery worker and beat..."
-celery -A wireguard_manager worker --loglevel=info &
-celery -A wireguard_manager beat --loglevel=info &
+echo "🚦 Starting Celery worker і beat (loglevel=WARNING)..."
+celery -A wireguard_manager worker --loglevel=warning &
+celery -A wireguard_manager beat --loglevel=warning &
 
 # Start server
 DEBUG_LOWER=$(echo "${DEBUG:-False}" | tr '[:upper:]' '[:lower:]')

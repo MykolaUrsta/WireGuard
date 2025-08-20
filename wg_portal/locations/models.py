@@ -543,7 +543,7 @@ class Device(models.Model):
     class Meta:
         verbose_name = "Пристрій"
         verbose_name_plural = "Пристрої"
-        unique_together = [['user', 'location', 'name']]
+        unique_together = [['location', 'name']]
         ordering = ['-created_at']
 
     def __str__(self):
@@ -626,6 +626,8 @@ PersistentKeepalive = 25
 
     def save(self, *args, **kwargs):
         """Зберігає пристрій та оновлює WireGuard конфігурацію"""
+        import logging
+        logger = logging.getLogger(__name__)
         is_new = self.pk is None
         old_device = None
         
@@ -646,29 +648,29 @@ PersistentKeepalive = 25
             
             if self.status == 'active' and self.public_key:
                 # Додаємо або оновлюємо peer
-                manager.add_peer_to_server(self)
+                added = manager.add_peer_to_server(self)
+                logger.info(f"Створено peer: {self} (user={self.user}, ip={self.ip_address}, public_key={self.public_key[:8]}...) | Додано в WG: {added}")
             elif old_device and old_device.public_key:
                 # Видаляємо старий peer якщо пристрій деактивований
                 manager.remove_peer_from_server(old_device)
                 
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Помилка оновлення WireGuard peer для пристрою {self.name}: {str(e)}")
 
     def delete(self, *args, **kwargs):
         """Видаляє пристрій та прибирає його з WireGuard конфігурації"""
+        import logging
+        logger = logging.getLogger(__name__)
         try:
             from .docker_manager import WireGuardDockerManager
             manager = WireGuardDockerManager()
             
             # Видаляємо peer з сервера
             if self.public_key:
-                manager.remove_peer_from_server(self)
+                removed = manager.remove_peer_from_server(self)
+                logger.info(f"Видалено peer: {self} (user={self.user}, ip={self.ip_address}, public_key={self.public_key[:8]}...) | Видалено з WG: {removed}")
                 
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Помилка видалення WireGuard peer для пристрою {self.name}: {str(e)}")
         
         # Видаляємо модель

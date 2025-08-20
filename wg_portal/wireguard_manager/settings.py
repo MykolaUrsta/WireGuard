@@ -1,3 +1,7 @@
+# Celery fix for CPendingDeprecationWarning (Celery 6+)
+from celery import Celery
+celery_app = Celery()
+celery_app.conf.broker_connection_retry_on_startup = True
 import os
 from pathlib import Path
 
@@ -39,7 +43,7 @@ INSTALLED_APPS = [
     'django_otp.plugins.otp_totp',
     'django_otp.plugins.otp_static',
     'accounts',
-    'wireguard_management',
+    'wireguard_management.apps.WireguardManagementConfig',
     'locations',
     'audit_logging',
 ]

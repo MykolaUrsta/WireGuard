@@ -10,6 +10,34 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class WireGuardDockerManager:
+
+    def add_peer_live(self, device):
+        """Додає peer до інтерфейсу wg без перезапуску (live)"""
+        try:
+            interface = device.location.interface_name
+            public_key = device.public_key
+            allowed_ip = f"{device.ip_address}/32"
+            logger.info(f"[LIVE-PEER] Спроба додати peer: interface={interface}, public_key={public_key}, allowed_ip={allowed_ip}")
+            # Використовуємо docker exec для виконання wg set у контейнері
+            cmd = [
+                "docker", "exec", "wireguard_vpn",
+                "wg", "set", interface,
+                "peer", public_key,
+                "allowed-ips", allowed_ip
+            ]
+            logger.info(f"[LIVE-PEER] Виконую команду: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            logger.info(f"[LIVE-PEER] stdout: {result.stdout}")
+            logger.info(f"[LIVE-PEER] stderr: {result.stderr}")
+            logger.info(f"[LIVE-PEER] returncode: {result.returncode}")
+            if result.returncode != 0:
+                logger.error(f"[LIVE-PEER] wg set error: {result.stderr}")
+                return False
+            logger.info(f"[LIVE-PEER] Peer {public_key} додано live до {interface}")
+            return True
+        except Exception as e:
+            logger.error(f"[LIVE-PEER] Live add peer error: {str(e)}")
+            return False
     """Менеджер для управління WireGuard через shared файлову систему"""
     
     def __init__(self, config_path='/app/wireguard_configs'):

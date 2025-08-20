@@ -126,6 +126,19 @@ def location_create(request):
                 is_active=is_active
             )
             
+            # Оновлюємо WireGuard конфігурацію та перезапускаємо інтерфейс
+            try:
+                from .docker_manager import WireGuardDockerManager
+                manager = WireGuardDockerManager()
+                manager.generate_server_config(location)
+                manager.restart_wireguard(location.interface_name)
+                messages.info(request, 'WireGuard конфігурація згенерована та інтерфейс перезапущено!')
+            except Exception as wg_error:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Помилка оновлення WireGuard після створення локації: {str(wg_error)}")
+                messages.warning(request, f'Локація створена, але WireGuard конфігурація не оновилась: {str(wg_error)}')
+
             messages.success(request, f'Локація "{location.name}" успішно створена та налаштована!')
             return redirect('locations:detail', pk=location.pk)
             
@@ -499,6 +512,7 @@ def device_create(request):
             if not device_ip:
                 return JsonResponse({'success': False, 'error': 'Немає доступних IP адрес у мережі'})
             
+
             # Створюємо пристрій
             device = Device.objects.create(
                 name=device_name,
@@ -510,6 +524,16 @@ def device_create(request):
                 private_key=private_key,
                 status='active'
             )
+
+            # Live-додавання peer до wg (без перезапуску)
+            try:
+                from .docker_manager import WireGuardDockerManager
+                manager = WireGuardDockerManager()
+                manager.add_peer_live(device)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Live add peer error: {str(e)}")
             
             # Генеруємо конфігурацію WireGuard
             config = f"""[Interface]
