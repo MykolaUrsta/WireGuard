@@ -514,7 +514,7 @@ def device_create(request):
             # Генеруємо конфігурацію WireGuard
             config = f"""[Interface]
 PrivateKey = {private_key}
-Address = {device_ip}/{network_ip.prefixlen}
+Address = {device_ip}/32
 DNS = {network.dns_servers or '8.8.8.8, 8.8.4.4'}
 
 [Peer]
@@ -575,7 +575,7 @@ def device_config_download(request, device_id):
     
     config = f"""[Interface]
 PrivateKey = {device.private_key}
-Address = {device.ip_address}/{network_ip.prefixlen}
+Address = {device.ip_address}/32
 DNS = {device.network.dns_servers or '8.8.8.8, 8.8.4.4'}
 
 [Peer]
