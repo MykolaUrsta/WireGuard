@@ -155,7 +155,6 @@ class WireGuardPeer(models.Model):
         verbose_name = 'WireGuard peer'
         verbose_name_plural = 'WireGuard peer\'и'
         ordering = ['-created_at']
-        unique_together = ['user', 'server', 'name']
     
     def __str__(self):
         return f"{self.user.username} - {self.name} ({self.ip_address})"

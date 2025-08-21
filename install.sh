@@ -201,6 +201,18 @@ create_directories() {
     fi
     
     echo "✓ Директорії створено"
+
+    # Встановлення прав на assets для статичних файлів (локально)
+    if [ -d "wg_portal/assets" ]; then
+        chmod -R a+rX wg_portal/assets
+        echo "✓ Права на wg_portal/assets встановлено"
+    fi
+
+    # Якщо є Docker і контейнер nginx, встановити права у контейнері (для production)
+    if docker compose ps | grep -q nginx; then
+        docker compose exec nginx chmod -R a+rX /var/www/static || true
+        echo "✓ Права на /var/www/static у контейнері nginx встановлено"
+    fi
 }
 
 # Функція зупинки існуючих контейнерів
@@ -251,16 +263,24 @@ setup_ssl() {
         echo "🔐 Пропускаємо SSL в режимі --no-sudo (для розробки)"
         return 0
     fi
-    
+
+    # Перевірка чи сертифікати вже існують
+    CERT_PATH="$(pwd)/ssl/certbot/conf/live/$DOMAIN/fullchain.pem"
+    KEY_PATH="$(pwd)/ssl/certbot/conf/live/$DOMAIN/privkey.pem"
+    if [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]; then
+        echo "✓ SSL сертифікати вже існують, пропускаємо отримання."
+        return 0
+    fi
+
     echo "🔐 Налаштування SSL сертифікату..."
-    
+
     # Перевірка доступності домену
     echo "   Перевіряємо доступність домену $DOMAIN..."
     if ! curl -s -I http://$DOMAIN >/dev/null 2>&1; then
         echo "⚠️  Домен $DOMAIN недоступний. Пропускаємо SSL..."
         return 0
     fi
-    
+
     # Отримання сертифікату
     echo "   Отримуємо SSL сертифікат..."
     docker run --rm \
@@ -273,10 +293,9 @@ setup_ssl() {
         --agree-tos \
         --no-eff-email \
         -d $DOMAIN
-    
+
     if [ $? -eq 0 ]; then
         echo "✓ SSL сертифікат отримано"
-        
         # Перезапуск nginx з SSL
         echo "   Перезапускаємо nginx з SSL..."
         docker compose restart nginx
@@ -368,8 +387,18 @@ main() {
     fi
 
     echo ""
-    echo "⏳ Очікуємо запуску сервісів (30 секунд)..."
-    sleep 30
+    echo "⏳ Очікуємо запуску сервісів..."
+    docker compose logs --tail=40 --follow &
+    LOGS_PID=$!
+    # Чекаємо поки всі сервіси будуть healthy або running
+    while true; do
+        unhealthy=$(docker compose ps --format '{{.Name}} {{.State}}' | grep -v "running\|healthy" | wc -l)
+        if [ "$unhealthy" -eq 0 ]; then
+            break
+        fi
+        sleep 2
+    done
+    kill $LOGS_PID
 
     if [ "$MODE" = "full" ]; then
         setup_ssl

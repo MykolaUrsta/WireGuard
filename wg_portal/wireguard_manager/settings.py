@@ -225,6 +225,11 @@ LOGGING = {
             'level': 'INFO',
             'propagate': True,
         },
+        'wg_portal.locations': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
     },
 }
 

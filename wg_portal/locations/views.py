@@ -439,11 +439,9 @@ def my_devices(request):
 @login_required
 def device_create(request):
     """Створення нового пристрою"""
-    from accounts.models import CustomUser
     import qrcode
     from io import BytesIO
     import base64
-    import secrets
     import ipaddress
     
     if request.method == 'POST':
@@ -513,6 +511,7 @@ def device_create(request):
                 return JsonResponse({'success': False, 'error': 'Немає доступних IP адрес у мережі'})
             
 
+
             # Створюємо пристрій
             device = Device.objects.create(
                 name=device_name,
@@ -524,6 +523,29 @@ def device_create(request):
                 private_key=private_key,
                 status='active'
             )
+
+            # Створюємо peer тільки після успішного створення пристрою
+            # Створюємо WireGuardPeer для пристрою, якщо такого ще немає
+            from wireguard_management.models import WireGuardPeer, WireGuardServer, WireGuardNetwork
+            if device and device.status == 'active':
+                wg_network = None
+                if device.network and device.network.subnet:
+                    wg_network = WireGuardNetwork.objects.filter(network_cidr=device.network.subnet).first()
+                if wg_network:
+                    server = WireGuardServer.objects.filter(network=wg_network).first()
+                    if server:
+                        exists = WireGuardPeer.objects.filter(user=device.user, ip_address=device.ip_address).exists()
+                        if not exists:
+                            WireGuardPeer.objects.create(
+                                user=device.user,
+                                server=server,
+                                name=device.name,
+                                ip_address=device.ip_address,
+                                public_key=device.public_key,
+                                private_key=device.private_key,
+                                allowed_ips='0.0.0.0/0',
+                                is_active=True
+                            )
 
             # Live-додавання peer до wg (без перезапуску)
             try:

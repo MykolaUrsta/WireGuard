@@ -147,33 +147,38 @@ class Location(models.Model):
         return None
 
     def save(self, *args, **kwargs):
-        """Зберігає локацію та оновлює WireGuard конфігурацію"""
+        """Зберігає локацію, оновлює порт у Network та WireGuard конфігурацію"""
         is_new = self.pk is None
-        
+
         # Генеруємо ключі якщо їх немає
         if not self.private_key or not self.public_key:
             self._generate_keys()
-        
+
         # Спочатку зберігаємо модель
         super().save(*args, **kwargs)
-        
+
+        # Оновлюємо порт у всіх мережах цієї локації, якщо змінився
+        for network in self.networks.all():
+            if network.server_port != self.server_port or network.listen_port != self.server_port:
+                network.server_port = self.server_port
+                network.listen_port = self.server_port
+                network.save()
+
         # Створюємо дефолтну мережу для нової локації
         if is_new:
             self._create_default_network()
-        
+
         # Потім оновлюємо WireGuard конфігурацію
         if self.is_active:
             try:
                 from .docker_manager import WireGuardDockerManager
                 manager = WireGuardDockerManager()
-                
                 # Генеруємо конфігурацію для цієї локації
                 manager.generate_server_config(self)
                 # Генеруємо конфігурації для всіх активних локацій
                 manager.generate_all_active_configs()
                 # Перезапускаємо цей інтерфейс
                 manager.restart_wireguard(self.interface_name)
-                
             except Exception as e:
                 import logging
                 logger = logging.getLogger(__name__)
@@ -543,7 +548,6 @@ class Device(models.Model):
     class Meta:
         verbose_name = "Пристрій"
         verbose_name_plural = "Пристрої"
-        unique_together = [['location', 'name']]
         ordering = ['-created_at']
 
     def __str__(self):

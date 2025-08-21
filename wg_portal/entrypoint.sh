@@ -26,15 +26,21 @@ if [ ! -f "/app/.initialized" ]; then
     echo "🚀 First run detected - initializing application..."
 fi
 
+
 # Run migrations
 echo "📊 Running database migrations..."
+# Create initial migration for locations if missing
+if [ ! -f "/app/locations/migrations/0001_initial.py" ]; then
+    echo "🛠 Creating initial migration for locations..."
+    python manage.py makemigrations locations --empty --name initial || true
+fi
 # Create migrations for all apps
 python manage.py makemigrations accounts --noinput || true
 python manage.py makemigrations wireguard_management --noinput || true
 python manage.py makemigrations locations --noinput || true
 python manage.py makemigrations audit_logging --noinput || true
-# Run all migrations
-python manage.py migrate --noinput
+# Run all migrations (with --fake-initial for legacy DB)
+python manage.py migrate --noinput --fake-initial
 
 # Collect static files
 echo "📁 Collecting static files..."
