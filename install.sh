@@ -210,8 +210,9 @@ create_directories() {
 
     # Якщо є Docker і контейнер nginx, встановити права у контейнері (для production)
     if docker compose ps | grep -q nginx; then
-        docker compose exec nginx chmod -R a+rX /var/www/static || true
-        echo "✓ Права на /var/www/static у контейнері nginx встановлено"
+        docker compose exec nginx find /var/www/static -type d -exec chmod 755 {} + || true
+        docker compose exec nginx find /var/www/static -type f -exec chmod 644 {} + || true
+        echo "✓ Права 755/644 на /var/www/static у контейнері nginx встановлено"
     fi
 }
 

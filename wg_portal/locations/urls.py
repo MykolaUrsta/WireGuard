@@ -23,7 +23,6 @@ urlpatterns = [
     path('networks/<int:pk>/', views.network_detail, name='network_detail'),
     
     # Пристрої
-    path('devices/', views.my_devices, name='my_devices'),
     path('devices/create/', views.device_create, name='device_create'),
     path('devices/<int:pk>/', views.device_detail, name='device_detail'),
     path('devices/<int:pk>/config/', views.device_config, name='device_config'),

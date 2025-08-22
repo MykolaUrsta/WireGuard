@@ -424,16 +424,6 @@ def quick_setup(request):
     return render(request, 'locations/quick_setup.html', context)
 
 
-@login_required
-def my_devices(request):
-    """Пристрої поточного користувача"""
-    devices = Device.objects.filter(user=request.user).select_related('network__location').order_by('-created_at')
-    
-    context = {
-        'devices': devices,
-    }
-    
-    return render(request, 'locations/my_devices.html', context)
 
 
 @login_required
@@ -452,9 +442,23 @@ def device_create(request):
             if not device_name or not location_id:
                 return JsonResponse({'success': False, 'error': 'Назва пристрою та локація обов\'язкові'})
             
-            # Використовуємо поточного користувача
-            user = request.user
+
+            # Якщо суперкористувач — дозволяємо створювати для іншого користувача
+            if request.user.is_superuser and request.POST.get('user_id'):
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                try:
+                    user = User.objects.get(pk=request.POST.get('user_id'))
+                except User.DoesNotExist:
+                    return JsonResponse({'success': False, 'error': 'Користувача не знайдено'})
+            else:
+                user = request.user
+
             location = get_object_or_404(Location, pk=location_id)
+
+            # Перевіряємо, чи вже існує пристрій з такою назвою у цього користувача
+            if Device.objects.filter(user=user, name=device_name).exists():
+                return JsonResponse({'success': False, 'error': 'У вас вже є пристрій з такою назвою. Виберіть іншу назву.'})
             
             # Завжди генеруємо нову пару ключів
             import subprocess
@@ -597,12 +601,13 @@ PersistentKeepalive = 25
     
     # GET запит - показуємо форму
     locations = Location.objects.filter(is_active=True).order_by('name')
-    
     context = {
         'locations': locations,
-        'title': 'Додати пристрій'
+        'title': 'Додати пристрій',
     }
-    
+    # Якщо суперкористувач і є user_id у GET — передаємо у шаблон
+    if request.user.is_superuser and request.GET.get('user_id'):
+        context['user_id'] = request.GET.get('user_id')
     return render(request, 'locations/device_create.html', context)
 
 

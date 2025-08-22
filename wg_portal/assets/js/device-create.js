@@ -47,6 +47,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Prepare form data
         const formData = new FormData(form);
         formData.append('key_option', 'generate'); // Always generate keys
+        // Якщо є приховане поле user_id — додаємо його явно (для сумісності)
+        const userIdInput = document.getElementById('user_id');
+        if (userIdInput) {
+            formData.append('user_id', userIdInput.value);
+        }
         
         // Add CSRF token
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;

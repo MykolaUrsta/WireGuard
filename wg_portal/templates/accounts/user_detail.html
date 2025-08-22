@@ -111,6 +111,17 @@
                     </svg>
                     Add new device
                 </a>
+                <script>
+                // Завжди додаємо user_id у url для створення пристрою (profile_user)
+                document.addEventListener('DOMContentLoaded', function() {
+                    var addBtn = document.querySelector('.add-device-btn');
+                    if (addBtn && '{{ profile_user.id }}') {
+                        if (!addBtn.href.includes('user_id=')) {
+                            addBtn.href = addBtn.href + '?user_id={{ profile_user.id }}';
+                        }
+                    }
+                });
+                </script>
             </div>
         </div>
         <div class="section-content">

@@ -36,6 +36,9 @@
 
                 <form id="deviceForm" method="post">
                     {% csrf_token %}
+                    {% if request.user.is_superuser and user_id %}
+                        <input type="hidden" id="user_id" name="user_id" value="{{ user_id }}">
+                    {% endif %}
                     <div class="form-group">
                         <label for="device_name">Назва пристрою:</label>
                         <input type="text" id="device_name" name="name" class="form-input" placeholder="Введіть назву пристрою" required>

@@ -549,6 +549,9 @@ class Device(models.Model):
         verbose_name = "Пристрій"
         verbose_name_plural = "Пристрої"
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'name'], name='unique_device_name_per_user')
+        ]
 
     def __str__(self):
         return f"{self.user.username} - {self.name} ({self.ip_address})"
