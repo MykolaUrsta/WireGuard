@@ -43,6 +43,10 @@ services:
       - ./logs:/app/logs
       - static_files:/app/staticfiles
       - /var/run/docker.sock:/var/run/docker.sock
+      - /lib/modules:/lib/modules
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
     depends_on:
       - db
       - redis

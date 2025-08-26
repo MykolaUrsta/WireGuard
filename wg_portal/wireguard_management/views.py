@@ -134,8 +134,74 @@ def create_config(request):
             request.user.wireguard_ip = peer_ip
             request.user.save()
             
+
+            # --- FIREWALL LOGIC ---
+            from .models import FirewallRule
+            # Очистити старі правила для цього peer (за IP)
+            FirewallRule.objects.filter(source_ip=peer_ip, network=server.network).delete()
+
+            # Дозволити лише ті адреси/мережі, які вказані у allowed_ips (через кому)
+            allowed_ips = request.POST.get('allowed_ips', peer_ip)
+
+            allowed_ip_list = [ip.strip() for ip in allowed_ips.split(',') if ip.strip()]
+            for ip in allowed_ip_list:
+                FirewallRule.objects.create(
+                    name=f"Allow {ip} for {peer_name}",
+                    network=server.network,
+                    action='allow',
+                    protocol='any',
+                    direction='both',
+                    source_ip=ip,
+                    is_enabled=True,
+                    priority=10
+                )
+
+            # Якщо є 0.0.0.0/0 — дозволяємо інтернет, але блокуємо приватні підмережі
+            if '0.0.0.0/0' in allowed_ip_list:
+                private_networks = [
+                    '10.0.0.0/8',
+                    '172.16.0.0/12',
+                    '192.168.0.0/16',
+                    '100.64.0.0/10',
+                    '127.0.0.0/8',
+                    '169.254.0.0/16',
+                    '::1/128',
+                    'fc00::/7',
+                    'fe80::/10',
+                ]
+                for net in private_networks:
+                    FirewallRule.objects.create(
+                        name=f"Deny private {net} for {peer_name}",
+                        network=server.network,
+                        action='deny',
+                        protocol='any',
+                        direction='both',
+                        source_ip=net,
+                        is_enabled=True,
+                        priority=15
+                    )
+
+            # Заборонити все інше для цього peer (крім дозволених)
+            FirewallRule.objects.create(
+                name=f"Deny all except allowed for {peer_name}",
+                network=server.network,
+                action='deny',
+                protocol='any',
+                direction='both',
+                source_ip='',  # Порожній = всі
+                is_enabled=True,
+                priority=20
+            )
+
             # Оновлюємо конфігурацію сервера
             update_server_config(server)
+            # Перезапускаємо інтерфейс, щоб новий peer одразу працював
+            from .utils import restart_wireguard_interface
+            restart_wireguard_interface(server.interface_name if hasattr(server, 'interface_name') else 'wg0')
+
+            # Застосувати firewall-правила через celery
+            from wireguard_management.tasks import apply_firewall_rules
+            apply_firewall_rules.delay(server.id)
             
             messages.success(request, f"Конфігурацію '{peer_name}' створено успішно!")
             return redirect('wireguard_management:dashboard')

@@ -33,6 +33,21 @@ class WireGuardDockerManager:
             if result.returncode != 0:
                 logger.error(f"[LIVE-PEER] wg set error: {result.stderr}")
                 return False
+            # Додаємо MASQUERADE для підмережі WG (NAT)
+            subnet = device.network.subnet if device.network else None
+            if subnet:
+                nat_cmd = [
+                    "docker", "exec", "wireguard_vpn",
+                    "sh", "-c",
+                    f"iptables -C POSTROUTING -t nat -s {subnet} -j MASQUERADE || iptables -A POSTROUTING -t nat -s {subnet} -j MASQUERADE"
+                ]
+                logger.info(f"[LIVE-PEER] Виконую NAT команду: {' '.join(nat_cmd)}")
+                nat_result = subprocess.run(nat_cmd, capture_output=True, text=True)
+                logger.info(f"[LIVE-PEER] NAT stdout: {nat_result.stdout}")
+                logger.info(f"[LIVE-PEER] NAT stderr: {nat_result.stderr}")
+                logger.info(f"[LIVE-PEER] NAT returncode: {nat_result.returncode}")
+                if nat_result.returncode != 0:
+                    logger.error(f"[LIVE-PEER] NAT error: {nat_result.stderr}")
             logger.info(f"[LIVE-PEER] Peer {public_key} додано live до {interface}")
             return True
         except Exception as e:

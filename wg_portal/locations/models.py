@@ -516,6 +516,12 @@ class Device(models.Model):
         default='active',
         verbose_name="Статус"
     )
+    allowed_ips = models.CharField(
+        max_length=255,
+        default="0.0.0.0/0",
+        verbose_name="Дозволені IP/мережі",
+        help_text="Список дозволених IP адрес або мереж через кому (наприклад: 0.0.0.0/0 для всього трафіку, або 192.168.1.0/24,10.0.0.0/8)"
+    )
     last_handshake = models.DateTimeField(
         null=True,
         blank=True,

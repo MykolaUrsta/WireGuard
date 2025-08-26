@@ -1,0 +1,16 @@
+{% extends 'layouts/index.html' %}
+{% block title %}Firewall: Девайси користувача{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Девайси користувача: {{ user.username }}</h1>
+    <ul class="list-group">
+        {% for device in devices %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <a href="{% url 'locations:firewall_device' device.id %}">{{ device.name }}</a>
+            <span class="badge bg-secondary rounded-pill">{{ device.ip_address }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    <a href="{% url 'locations:firewall' %}" class="btn btn-link mt-3">← Назад до користувачів</a>
+</div>
+{% endblock %}

@@ -46,6 +46,10 @@ python manage.py migrate --noinput --fake-initial
 echo "📁 Collecting static files..."
 python manage.py collectstatic --noinput --clear
 
+# Fix permissions for static files so nginx can read them
+chmod -R 755 /app/staticfiles
+chown -R root:root /app/staticfiles
+
 # Create superuser if it doesn't exist
 if [ "$FIRST_RUN" = true ]; then
     echo "👤 Creating superuser..."

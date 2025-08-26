@@ -1,0 +1,37 @@
+{% extends 'layouts/index.html' %}
+{% block title %}Firewall{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Firewall</h1>
+    <p>Тут можна дозволяти або забороняти доступ peer-ів до різних мереж.</p>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Peer/Device</th>
+                <th>Дозволені мережі</th>
+                <th>Дія</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for device in devices %}
+            <tr>
+                <td>{{ device.name }}<br><small>{{ device.user.username }}</small></td>
+                <td>
+                    <form method="post" action="{% url 'locations:firewall_update' device.id %}">
+                        {% csrf_token %}
+                        <input type="text" name="allowed_ips" value="{{ device.allowed_ips|default:'0.0.0.0/0' }}" class="form-control" placeholder="0.0.0.0/0, 192.168.1.0/24">
+                        <button type="submit" class="btn btn-primary btn-sm mt-2">Зберегти</button>
+                    </form>
+                </td>
+                <td>
+                    <form method="post" action="{% url 'locations:firewall_block' device.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm">Заборонити все</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

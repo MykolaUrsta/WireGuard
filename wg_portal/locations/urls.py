@@ -40,4 +40,10 @@ urlpatterns = [
     path('api/location-history/<int:pk>/', views.api_location_history, name='api_location_history'),
     path('api/peer-history/<int:pk>/', views.api_peer_history, name='api_peer_history'),
     path('api/refresh-stats/<int:pk>/', views.api_refresh_location_stats, name='api_refresh_location_stats'),
+
+    # Firewall
+    path('firewall/', views.firewall, name='firewall'),
+    path('firewall/user/<int:user_id>/', views.firewall_user, name='firewall_user'),
+    path('firewall/device/<int:device_id>/', views.firewall_device, name='firewall_device'),
+
 ]

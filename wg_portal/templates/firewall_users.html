@@ -1,0 +1,15 @@
+{% extends 'layouts/index.html' %}
+{% block title %}Firewall{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Firewall: Користувачі</h1>
+    <ul class="list-group">
+        {% for user in users %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <a href="{% url 'locations:firewall_user' user.id %}">{{ user.username }}</a>
+            <span class="badge bg-primary rounded-pill">{{ user.devices.count }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

@@ -1,3 +1,4 @@
+from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -938,3 +939,39 @@ def api_refresh_location_stats(request, pk):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+# Firewall: список користувачів
+@login_required
+def firewall(request):
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    users = User.objects.all().order_by('username')
+    return render(request, 'firewall_users.html', {'users': users})
+
+# Firewall: список девайсів користувача
+@login_required
+def firewall_user(request, user_id):
+    from django.contrib.auth import get_user_model
+    from .models import Device
+    User = get_user_model()
+    user = User.objects.get(pk=user_id)
+    devices = Device.objects.filter(user=user).order_by('name')
+    return render(request, 'firewall_devices.html', {'user': user, 'devices': devices})
+
+# Firewall: правила для девайса
+@login_required
+@csrf_exempt
+def firewall_device(request, device_id):
+    from .models import Device
+    device = Device.objects.select_related('user').get(pk=device_id)
+    if request.method == 'POST' and (request.user.is_superuser or request.user == device.user):
+        allowed_ips = request.POST.get('allowed_ips', '0.0.0.0/0')
+        device.allowed_ips = allowed_ips
+        device.save()
+        # live-оновлення peer
+        from .docker_manager import WireGuardDockerManager
+        manager = WireGuardDockerManager()
+        manager.add_peer_live(device)
+        return redirect('locations:firewall_device', device_id=device.id)
+    return render(request, 'firewall_device.html', {'device': device})

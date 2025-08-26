@@ -1,0 +1,59 @@
+{% extends 'layouts/index.html' %}
+{% load split %}
+{% block title %}Firewall: Правила для {{ device.name }}{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Firewall: {{ device.name }} ({{ device.user.username }})</h1>
+    <form method="post" action="" id="firewall-form">
+        {% csrf_token %}
+        <label class="form-label">Дозволені мережі або IP:</label>
+        <div id="allowed-ips-list">
+            {% for ip in device.allowed_ips|default:'0.0.0.0/0'|split:',' %}
+            <div class="input-group mb-2 allowed-ip-row">
+                <input type="text" name="allowed_ips" class="form-control" value="{{ ip|trim }}" placeholder="0.0.0.0/0 або 192.168.1.1">
+                <button type="button" class="btn btn-danger remove-ip">&minus;</button>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="button" class="btn btn-success mb-3" id="add-ip">+</button>
+        <br>
+        <button type="submit" class="btn btn-primary">Зберегти</button>
+        <a href="{% url 'locations:firewall_user' device.user.id %}" class="btn btn-link">← Назад до девайсів</a>
+    </form>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const addBtn = document.getElementById('add-ip');
+        const list = document.getElementById('allowed-ips-list');
+        addBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const row = document.createElement('div');
+            row.className = 'input-group mb-2 allowed-ip-row';
+            row.innerHTML = `<input type="text" name="allowed_ips" class="form-control" placeholder="0.0.0.0/0 або 192.168.1.1"><button type="button" class="btn btn-danger remove-ip">&minus;</button>`;
+            list.appendChild(row);
+        });
+        list.addEventListener('click', function(e) {
+            if (e.target.classList.contains('remove-ip')) {
+                e.preventDefault();
+                e.target.closest('.allowed-ip-row').remove();
+            }
+        });
+        // Перед сабмітом збираємо всі поля в один рядок через кому
+        document.getElementById('firewall-form').addEventListener('submit', function(e) {
+            const ips = Array.from(list.querySelectorAll('input[name="allowed_ips"]')).map(i => i.value.trim()).filter(Boolean);
+            if (ips.length) {
+                // Створюємо приховане поле з усіма IP через кому
+                let hidden = document.getElementById('allowed_ips_hidden');
+                if (!hidden) {
+                    hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'allowed_ips';
+                    hidden.id = 'allowed_ips_hidden';
+                    this.appendChild(hidden);
+                }
+                hidden.value = ips.join(',');
+            }
+        });
+    });
+    </script>
+</div>
+{% endblock %}
